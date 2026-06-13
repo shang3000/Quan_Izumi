@@ -1,0 +1,2612 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Python数据分析实验手册</title>
+<style>
+  /* ===== Reset & Base ===== */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #edf2f7;
+    --card-bg:   #ffffff;
+    --accent:    #4a90d9;
+    --accent-dk: #357abd;
+    --accent-lt: #d6e4f0;
+    --text:      #2d3748;
+    --text-lt:   #718096;
+    --border:    #cbd5e0;
+    --code-bg:   #1e293b;
+    --code-fg:   #e2e8f0;
+    --sidebar-w: 280px;
+    --right-panel-w: 320px;
+    --success:   #48bb78;
+    --warn:      #ed8936;
+    --danger:    #fc8181;
+    --tag-bg:    #ebf4ff;
+    --tag-border:#90cdf4;
+    --card-shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+    --card-radius: 10px;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    display: flex;
+    min-height: 100vh;
+    padding-right: var(--right-panel-w);
+  }
+
+  /* ===== Sidebar ===== */
+  .sidebar {
+    position: fixed; top: 0; left: 0;
+    width: var(--sidebar-w); height: 100vh;
+    background: linear-gradient(180deg, #2b6cb0 0%, #2c5282 100%);
+    color: #fff;
+    overflow-y: auto;
+    z-index: 100;
+    display: flex; flex-direction: column;
+    transition: transform .35s cubic-bezier(.4,0,.2,1);
+  }
+  .sidebar-header {
+    padding: 24px 20px 16px;
+    text-align: center;
+    border-bottom: 1px solid rgba(255,255,255,.15);
+  }
+  .sidebar-header h2 { font-size: 17px; margin-bottom: 6px; }
+  .sidebar-header .kaomoji { font-size: 22px; display: block; margin-bottom: 4px; }
+
+  .progress-bar-wrap {
+    margin: 12px 20px 4px;
+    background: rgba(255,255,255,.15);
+    border-radius: 8px;
+    height: 10px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #63b3ed, #48bb78);
+    border-radius: 8px;
+    transition: width .5s ease;
+    width: 0%;
+  }
+  .progress-text {
+    text-align: center;
+    font-size: 12px;
+    color: rgba(255,255,255,.7);
+    margin-bottom: 12px;
+  }
+
+  .sidebar nav { flex: 1; padding: 8px 0; }
+
+  .nav-group { margin-bottom: 4px; }
+  .nav-group-title {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 20px;
+    font-size: 14px; font-weight: 600;
+    cursor: pointer;
+    transition: background .2s;
+    user-select: none;
+  }
+  .nav-group-title:hover { background: rgba(255,255,255,.1); }
+  .nav-group-title .arrow {
+    transition: transform .3s;
+    font-size: 10px;
+  }
+  .nav-group.open .arrow { transform: rotate(90deg); }
+
+  .nav-items {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height .4s cubic-bezier(.4,0,.2,1);
+  }
+  .nav-group.open .nav-items { max-height: 800px; }
+
+  .nav-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 20px 7px 36px;
+    font-size: 13px;
+    color: rgba(255,255,255,.75);
+    cursor: pointer;
+    transition: all .2s;
+    text-decoration: none;
+    position: relative;
+  }
+  .nav-item:hover { color: #fff; background: rgba(255,255,255,.08); }
+  .nav-item.active { color: #fff; background: rgba(255,255,255,.12); }
+  .nav-item .mini-check {
+    width: 14px; height: 14px;
+    border: 1.5px solid rgba(255,255,255,.4);
+    border-radius: 3px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .2s;
+  }
+  .nav-item .mini-check.done {
+    background: var(--success);
+    border-color: var(--success);
+  }
+  .nav-item .mini-check.done::after {
+    content: '';
+    width: 7px; height: 4px;
+    border-left: 1.5px solid #fff;
+    border-bottom: 1.5px solid #fff;
+    transform: rotate(-45deg) translateY(-1px);
+  }
+
+  /* ===== Main ===== */
+  .main {
+    margin-left: var(--sidebar-w);
+    flex: 1;
+    padding: 0 40px 80px;
+    min-width: 0;
+  }
+
+  /* ===== Right Panel ===== */
+  .right-panel {
+    position: fixed; top: 0; right: 0;
+    width: var(--right-panel-w); height: 100vh;
+    background: #fff;
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 20px;
+    z-index: 50;
+  }
+  .right-panel h3 {
+    font-size: 15px;
+    color: var(--accent);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--accent-lt);
+  }
+  .right-panel .tip-group { margin-bottom: 20px; }
+  .right-panel .tip-group h4 {
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 6px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .right-panel .tip-group h4::before {
+    content: '';
+    width: 4px; height: 14px;
+    background: var(--accent);
+    border-radius: 2px;
+    display: inline-block;
+  }
+  .right-panel .tip-item {
+    background: var(--bg);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    line-height: 1.6;
+    transition: transform .2s, box-shadow .2s;
+    cursor: default;
+  }
+  .right-panel .tip-item:hover {
+    transform: translateX(3px);
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+  }
+  .right-panel .tip-item code {
+    background: var(--code-bg);
+    color: #63b3ed;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+  .right-panel .tip-item .tip-title {
+    font-weight: 600;
+    color: var(--accent-dk);
+    display: block;
+    margin-bottom: 4px;
+  }
+  .right-panel .tip-item .tip-desc {
+    color: var(--text-lt);
+    font-size: 12px;
+  }
+  .right-panel::-webkit-scrollbar { width: 4px; }
+  .right-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* ===== Page Header ===== */
+  .page-header {
+    text-align: center;
+    padding: 48px 0 32px;
+  }
+  .page-header .big-kaomoji { font-size: 40px; display: block; margin-bottom: 8px; }
+  .page-header h1 { font-size: 28px; color: var(--accent); margin-bottom: 8px; }
+  .page-header p { color: var(--text-lt); font-size: 15px; }
+
+  /* ===== Experiment Section ===== */
+  .experiment {
+    margin-bottom: 48px;
+  }
+  .exp-header {
+    background: linear-gradient(135deg, var(--accent) 0%, #6c63ff 100%);
+    color: #fff;
+    padding: 28px 32px;
+    border-radius: var(--card-radius);
+    margin-bottom: 24px;
+    box-shadow: 0 4px 14px rgba(74,144,217,.25);
+  }
+  .exp-header h2 { font-size: 20px; margin-bottom: 6px; }
+  .exp-header .goal {
+    font-size: 14px;
+    opacity: .9;
+    background: rgba(255,255,255,.15);
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 20px;
+    margin-top: 4px;
+  }
+
+  /* ===== Card (Collapsible) ===== */
+  .card {
+    background: var(--card-bg);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+    margin-bottom: 16px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    transition: box-shadow .3s;
+  }
+  .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+
+  .card-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 20px;
+    cursor: pointer;
+    user-select: none;
+    transition: background .2s;
+  }
+  .card-header:hover { background: #f7fafc; }
+
+  .card-toggle {
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    background: var(--accent-lt);
+    color: var(--accent);
+    font-size: 12px;
+    flex-shrink: 0;
+    transition: transform .35s cubic-bezier(.4,0,.2,1), background .3s;
+  }
+  .card.open .card-toggle { transform: rotate(180deg); background: var(--accent); color: #fff; }
+
+  .card-title-area { flex: 1; }
+  .card-title-area h3 { font-size: 15px; font-weight: 600; }
+
+  .card-check {
+    width: 20px; height: 20px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: all .25s;
+    position: relative;
+  }
+  .card-check:hover { border-color: var(--accent); }
+  .card-check.checked {
+    background: var(--success);
+    border-color: var(--success);
+  }
+  .card-check.checked::after {
+    content: '';
+    width: 10px; height: 5px;
+    border-left: 2px solid #fff;
+    border-bottom: 2px solid #fff;
+    transform: rotate(-45deg) translateY(-2px);
+  }
+
+  .card-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height .5s cubic-bezier(.4,0,.2,1), padding .3s;
+    padding: 0 20px;
+  }
+  .card.open .card-body {
+    max-height: 3000px;
+    padding: 0 20px 20px;
+  }
+  .card.open .card-header { border-bottom: 1px solid #edf2f7; }
+
+  .card-body p { margin-bottom: 10px; font-size: 14px; color: #4a5568; }
+  .card-body p.original-text {
+    background: #fefce8;
+    border-left: 3px solid #f59e0b;
+    padding: 10px 14px;
+    border-radius: 0 6px 6px 0;
+    color: #92400e;
+    font-size: 13px;
+  }
+  .card-body ul, .card-body ol { margin: 8px 0 12px 20px; font-size: 14px; color: #4a5568; }
+  .card-body li { margin-bottom: 4px; }
+
+  /* ===== Tags ===== */
+  .tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px;
+    padding: 2px 10px;
+    border-radius: 12px;
+    background: var(--tag-bg);
+    color: var(--accent);
+    border: 1px solid var(--tag-border);
+    margin-top: 4px;
+    font-weight: 500;
+  }
+
+  /* ===== Code Block ===== */
+  .code-block {
+    background: var(--code-bg);
+    border-radius: 8px;
+    margin: 12px 0;
+    overflow: hidden;
+  }
+  .code-block .code-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 14px;
+    background: rgba(255,255,255,.06);
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .code-block .code-header span {
+    color: rgba(255,255,255,.5);
+    font-size: 12px;
+  }
+  .code-block pre {
+    margin: 0;
+    padding: 16px 18px;
+    background: transparent;
+    color: var(--code-fg);
+    font-family: "Fira Code", "Cascadia Code", "JetBrains Mono", "Consolas", monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  pre.code-block {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    border-radius: 8px;
+    padding: 16px 18px;
+    font-family: "Fira Code", "Cascadia Code", "JetBrains Mono", "Consolas", monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    overflow-x: auto;
+    margin: 12px 0;
+    white-space: pre;
+  }
+
+  /* Syntax Highlighting */
+  .kw  { color: #c792ea; }  /* keywords */
+  .fn, .func  { color: #82aaff; }  /* functions */
+  .str { color: #c3e88d; }  /* strings */
+  .num { color: #f78c6c; }  /* numbers */
+  .cm, .comment  { color: #637777; font-style: italic; }  /* comments */
+  .op  { color: #89ddff; }  /* operators */
+  .var { color: #eeffff; }  /* variables */
+  .cls { color: #ffcb6b; }  /* class names */
+  .dec { color: #c792ea; }  /* decorators */
+
+  /* ===== Info Box ===== */
+  .info-box {
+    background: #ebf8ff;
+    border-left: 4px solid var(--accent);
+    padding: 12px 16px;
+    border-radius: 0 8px 8px 0;
+    margin: 12px 0;
+    font-size: 13px;
+    color: #2b6cb0;
+  }
+  .info-box.warn {
+    background: #fffaf0;
+    border-color: var(--warn);
+    color: #c05621;
+  }
+
+  /* ===== Sub-title inside card ===== */
+  .sub-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent);
+    margin: 14px 0 8px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .sub-title::before {
+    content: '';
+    width: 4px; height: 16px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+
+  /* ===== Table ===== */
+  .mini-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+    font-size: 13px;
+  }
+  .mini-table th, .mini-table td {
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    text-align: left;
+  }
+  .mini-table th {
+    background: var(--accent-lt);
+    font-weight: 600;
+    color: var(--accent-dk);
+  }
+  .mini-table tr:nth-child(even) { background: #f7fafc; }
+
+  /* ===== Mobile Toggle ===== */
+  .mobile-toggle {
+    display: none;
+    position: fixed; top: 12px; left: 12px;
+    z-index: 200;
+    width: 40px; height: 40px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,.2);
+  }
+  .sidebar-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.4);
+    z-index: 90;
+  }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 1200px) {
+    .right-panel { display: none; }
+    body { padding-right: 0; }
+  }
+  @media (max-width: 860px) {
+    .sidebar { transform: translateX(-100%); }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-overlay.open { display: block; }
+    .mobile-toggle { display: flex; align-items: center; justify-content: center; }
+    .main { margin-left: 0; padding: 0 16px 60px; padding-top: 56px; }
+    .page-header { padding-top: 24px; }
+  }
+
+  /* ===== Scrollbar ===== */
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,.2); border-radius: 4px; }
+
+  /* ===== Animate on scroll ===== */
+  .fade-in {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity .6s ease, transform .6s ease;
+  }
+  .fade-in.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+</style>
+</head>
+<body>
+
+<!-- Mobile toggle -->
+<button class="mobile-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">&#9776;</button>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+<!-- ===== SIDEBAR ===== -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <span class="kaomoji">(๑•̀ㅂ•́)و✧</span>
+    <h2>Python数据分析实验手册</h2>
+  </div>
+  <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progressFill"></div></div>
+  <div class="progress-text" id="progressText">完成 0 / 0</div>
+  <nav id="sidebarNav"></nav>
+</aside>
+
+<!-- ===== MAIN CONTENT ===== -->
+<div class="main" id="mainContent">
+  <div class="page-header">
+    <span class="big-kaomoji">(´▽`ʃ♡ƪ)</span>
+    <h1>Python数据分析实验手册</h1>
+    <p>面向对象 &bull; NumPy基础 &bull; Pandas基础 &bull; 可视化基础 &bull; 数据预处理一 &bull; 数据预处理二</p>
+  </div>
+
+  <!-- ============ EXPERIMENT 1 ============ -->
+  <section class="experiment fade-in" id="exp1">
+    <div class="exp-header">
+      <h2>第一次实验课：面向对象编程基础</h2>
+      <span class="goal">目标：掌握Python面向对象的编程</span>
+    </div>
+
+    <!-- 练习1 -->
+    <div class="card" id="card-exp1-1">
+      <div class="card-header" onclick="toggleCard('exp1-1')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习1、图形面积计算系统</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp1-1')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">图形面积计算系统，创建一个基类 Shape（图形），包含属性：名称(name)，方法：计算面积(calculate_area)，返回0；（1）创建2个子类：Rectangle（矩形）：继承Shape，新增属性长(length)、宽(width)，重写calculate_area方法；Circle（圆形）：继承Shape，新增属性半径(radius)，重写calculate_area方法。（2）根据用户输入的图形类型，选择输出对应的面积，要求有构造函数的使用。</p>
+        <div class="info-box">
+          <strong>知识点：</strong>继承、方法重写、构造函数 <code>__init__</code>
+        </div>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre><span class="kw">class</span> Shape:
+    <span class="kw">def</span> <span class="func">__init__</span>(self, name):
+        self.name = name
+    <span class="kw">def</span> <span class="func">calculate_area</span>(self):
+        <span class="kw">return</span> <span class="num">0</span>
+
+<span class="kw">class</span> Rectangle(Shape):
+    <span class="kw">def</span> <span class="func">__init__</span>(self, length, width):
+        <span class="func">super</span>().<span class="func">__init__</span>(<span class="str">'矩形'</span>)
+        self.length = length
+        self.width = width
+    <span class="kw">def</span> <span class="func">calculate_area</span>(self):
+        <span class="kw">return</span> self.length * self.width
+
+<span class="kw">class</span> Circle(Shape):
+    <span class="kw">def</span> <span class="func">__init__</span>(self, radius):
+        <span class="func">super</span>().<span class="func">__init__</span>(<span class="str">'圆形'</span>)
+        self.radius = radius
+    <span class="kw">def</span> <span class="func">calculate_area</span>(self):
+        <span class="kw">return</span> <span class="num">3.14159</span> * self.radius ** <span class="num">2</span>
+
+<span class="comment"># 使用示例</span>
+choice = <span class="func">input</span>(<span class="str">'请输入图形类型(矩形/圆形): '</span>)
+<span class="kw">if</span> choice == <span class="str">'矩形'</span>:
+    l = <span class="func">float</span>(<span class="func">input</span>(<span class="str">'长: '</span>))
+    w = <span class="func">float</span>(<span class="func">input</span>(<span class="str">'宽: '</span>))
+    shape = Rectangle(l, w)
+<span class="kw">else</span>:
+    r = <span class="func">float</span>(<span class="func">input</span>(<span class="str">'半径: '</span>))
+    shape = Circle(r)
+<span class="func">print</span>(<span class="str">f'面积: </span>{shape.calculate_area()}<span class="str">'</span>)</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习2 -->
+    <div class="card" id="card-exp1-2">
+      <div class="card-header" onclick="toggleCard('exp1-2')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习2、猜数字游戏</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp1-2')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">猜数字游戏：一个类A有一个成员变量v，有一个初值100。定义一个类，对A类的成员变量v进行猜。如果大了则提示大了，小了则提示小了。等于则提示猜测成功。</p>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre><span class="kw">class</span> A:
+    <span class="kw">def</span> <span class="func">__init__</span>(self):
+        self.v = <span class="num">100</span>
+
+<span class="kw">class</span> GuessGame:
+    <span class="kw">def</span> <span class="func">__init__</span>(self, target):
+        self.target = target
+    <span class="kw">def</span> <span class="func">guess</span>(self, num):
+        <span class="kw">if</span> num > self.target.v:
+            <span class="func">print</span>(<span class="str">'大了'</span>)
+        <span class="kw">elif</span> num < self.target.v:
+            <span class="func">print</span>(<span class="str">'小了'</span>)
+        <span class="kw">else</span>:
+            <span class="func">print</span>(<span class="str">'猜测成功!'</span>)
+
+a = A()
+game = GuessGame(a)
+<span class="kw">while</span> <span class="kw">True</span>:
+    n = <span class="func">int</span>(<span class="func">input</span>(<span class="str">'请输入猜测的数: '</span>))
+    game.guess(n)
+    <span class="kw">if</span> n == a.v:
+        <span class="kw">break</span></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习3 -->
+    <div class="card" id="card-exp1-3">
+      <div class="card-header" onclick="toggleCard('exp1-3')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习3、Student类求平均分</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp1-3')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">定义student类，类中有No和Name属性，分别表示学生学号和姓名，stu_avg方法用于计算三门课程成绩的平均分。调用student类，输入三门功课的成绩后，输出：学号+姓名+平均成绩。</p>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre><span class="kw">class</span> Student:
+    <span class="kw">def</span> <span class="func">__init__</span>(self, No, Name):
+        self.No = No
+        self.Name = Name
+    <span class="kw">def</span> <span class="func">stu_avg</span>(self, s1, s2, s3):
+        <span class="kw">return</span> (s1 + s2 + s3) / <span class="num">3</span>
+
+no = <span class="func">input</span>(<span class="str">'学号: '</span>)
+name = <span class="func">input</span>(<span class="str">'姓名: '</span>)
+s1, s2, s3 = <span class="func">map</span>(<span class="func">float</span>, <span class="func">input</span>(<span class="str">'三门成绩(空格分隔): '</span>).split())
+stu = Student(no, name)
+avg = stu.stu_avg(s1, s2, s3)
+<span class="func">print</span>(<span class="str">f'学号:{no} 姓名:{name} 平均成绩:{avg:.2f}'</span>)</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习4 -->
+    <div class="card" id="card-exp1-4">
+      <div class="card-header" onclick="toggleCard('exp1-4')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习4、计算级数的值</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp1-4')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p>计算 <code>1 + 1/3 + 1/5 + 1/7 + ... + 1/99</code> 的值</p>
+        <div class="info-box">
+          <strong>思路提示：</strong>这是奇数倒数之和，分母是 1, 3, 5, 7, ..., 99，可以用循环累加。
+        </div>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre><span class="comment"># 方法一：for循环</span>
+total = <span class="num">0</span>
+<span class="kw">for</span> i <span class="kw">in</span> <span class="func">range</span>(<span class="num">1</span>, <span class="num">100</span>, <span class="num">2</span>):  <span class="comment"># 1,3,5,...,99</span>
+    total += <span class="num">1</span> / i
+<span class="func">print</span>(<span class="str">f'结果: </span>{total}<span class="str">'</span>)
+
+<span class="comment"># 方法二：列表推导式</span>
+total = <span class="func">sum</span>(<span class="num">1</span>/i <span class="kw">for</span> i <span class="kw">in</span> <span class="func">range</span>(<span class="num">1</span>, <span class="num">100</span>, <span class="num">2</span>))
+<span class="func">print</span>(<span class="str">f'结果: </span>{total}<span class="str">'</span>)</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习5 -->
+    <div class="card" id="card-exp1-5">
+      <div class="card-header" onclick="toggleCard('exp1-5')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习5、简易计算器</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp1-5')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">实现简易计算机功能，要求有加减乘除。</p>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre><span class="kw">class</span> Calculator:
+    <span class="kw">def</span> <span class="func">add</span>(self, a, b):
+        <span class="kw">return</span> a + b
+    <span class="kw">def</span> <span class="func">sub</span>(self, a, b):
+        <span class="kw">return</span> a - b
+    <span class="kw">def</span> <span class="func">mul</span>(self, a, b):
+        <span class="kw">return</span> a * b
+    <span class="kw">def</span> <span class="func">div</span>(self, a, b):
+        <span class="kw">if</span> b == <span class="num">0</span>:
+            <span class="kw">return</span> <span class="str">'除数不能为0'</span>
+        <span class="kw">return</span> a / b
+
+calc = Calculator()
+a = <span class="func">float</span>(<span class="func">input</span>(<span class="str">'第一个数: '</span>))
+op = <span class="func">input</span>(<span class="str">'运算符(+,-,*,/): '</span>)
+b = <span class="func">float</span>(<span class="func">input</span>(<span class="str">'第二个数: '</span>))
+
+ops = {<span class="str">'+'</span>: calc.add, <span class="str">'-'</span>: calc.sub,
+       <span class="str">'*'</span>: calc.mul, <span class="str">'/'</span>: calc.div}
+<span class="func">print</span>(<span class="str">f'结果: </span>{ops[op](a, b)}<span class="str">'</span>)</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习6 -->
+    <div class="card" id="card-exp1-6">
+      <div class="card-header" onclick="toggleCard('exp1-6')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习6、Person类冒泡排序</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp1-6')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">定义一个Person类（有属性：name, age, job），初始化Person对象数组，有3个person对象，并按照age从大到小进行排序后输出名字和对应的年龄，要求使用冒泡排序。</p>
+        <div class="info-box">
+          <strong>知识点：</strong>冒泡排序、对象比较、<code>__str__</code> 方法
+        </div>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre><span class="kw">class</span> Person:
+    <span class="kw">def</span> <span class="func">__init__</span>(self, name, age, job):
+        self.name = name
+        self.age = age
+        self.job = job
+
+persons = [
+    Person(<span class="str">'张三'</span>, <span class="num">25</span>, <span class="str">'工程师'</span>),
+    Person(<span class="str">'李四'</span>, <span class="num">30</span>, <span class="str">'教师'</span>),
+    Person(<span class="str">'王五'</span>, <span class="num">22</span>, <span class="str">'学生'</span>)
+]
+
+<span class="comment"># 冒泡排序（按age从大到小）</span>
+<span class="kw">for</span> i <span class="kw">in</span> <span class="func">range</span>(<span class="func">len</span>(persons)):
+    <span class="kw">for</span> j <span class="kw">in</span> <span class="func">range</span>(<span class="func">len</span>(persons)-<span class="num">1</span>-i):
+        <span class="kw">if</span> persons[j].age < persons[j+<span class="num">1</span>].age:
+            persons[j], persons[j+<span class="num">1</span>] = persons[j+<span class="num">1</span>], persons[j]
+
+<span class="kw">for</span> p <span class="kw">in</span> persons:
+    <span class="func">print</span>(<span class="str">f'姓名:{p.name} 年龄:{p.age}'</span>)</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习7 -->
+    <div class="card" id="card-exp1-7">
+      <div class="card-header" onclick="toggleCard('exp1-7')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习7、员工类继承体系</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp1-7')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">编员工类Employee：要求有属性"姓名name""年龄age""职称post""基本工资salary"；（1）编写业务方法introduce，实现输出一个员工的信息；（2）编写员工类的三个子类：公司经理类、部门主任类、普通员工类。工资系数分别为：公司经理为3.3、部门主任为2.1、普通员工1。在三个子类里面都重写父类的introduce()方法；（3）定义并初始化一个员工对象，调用业务方法，实现对象基本信息的输出。</p>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre><span class="kw">class</span> Employee:
+    <span class="kw">def</span> <span class="func">__init__</span>(self, name, age, post, salary):
+        self.name = name
+        self.age = age
+        self.post = post
+        self.salary = salary
+    <span class="kw">def</span> <span class="func">introduce</span>(self):
+        <span class="func">print</span>(<span class="str">f'姓名:{self.name} 年龄:{self.age} '</span>
+              <span class="str">f'职称:{self.post} 工资:{self.salary}'</span>)
+
+<span class="kw">class</span> Manager(Employee):
+    <span class="kw">def</span> <span class="func">__init__</span>(self, name, age):
+        <span class="func">super</span>().<span class="func">__init__</span>(name, age, <span class="str">'经理'</span>, <span class="num">0</span>)
+        self.salary = <span class="num">3.3</span> * <span class="num">5000</span>  <span class="comment"># 基本工资*系数</span>
+    <span class="kw">def</span> <span class="func">introduce</span>(self):
+        <span class="func">print</span>(<span class="str">f'[经理] {self.name} {self.age}岁 '</span>
+              <span class="str">f'工资:{self.salary:.1f}'</span>)
+
+<span class="kw">class</span> Director(Employee):
+    <span class="kw">def</span> <span class="func">__init__</span>(self, name, age):
+        <span class="func">super</span>().<span class="func">__init__</span>(name, age, <span class="str">'主任'</span>, <span class="num">0</span>)
+        self.salary = <span class="num">2.1</span> * <span class="num">5000</span>
+    <span class="kw">def</span> <span class="func">introduce</span>(self):
+        <span class="func">print</span>(<span class="str">f'[主任] {self.name} {self.age}岁 '</span>
+              <span class="str">f'工资:{self.salary:.1f}'</span>)
+
+<span class="kw">class</span> Staff(Employee):
+    <span class="kw">def</span> <span class="func">__init__</span>(self, name, age):
+        <span class="func">super</span>().<span class="func">__init__</span>(name, age, <span class="str">'员工'</span>, <span class="num">0</span>)
+        self.salary = <span class="num">1.0</span> * <span class="num">5000</span>
+    <span class="kw">def</span> <span class="func">introduce</span>(self):
+        <span class="func">print</span>(<span class="str">f'[员工] {self.name} {self.age}岁 '</span>
+              <span class="str">f'工资:{self.salary:.1f}'</span>)
+
+<span class="comment"># 测试</span>
+emp = Manager(<span class="str">'张三'</span>, <span class="num">35</span>)
+emp.introduce()</pre>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ============ EXPERIMENT 2 ============ -->
+  <section class="experiment fade-in" id="exp2">
+    <div class="exp-header">
+      <h2>第二次实验课：NumPy基础练习</h2>
+      <span class="goal">目标：掌握NumPy的基础用法</span>
+    </div>
+
+    <!-- 练习1 -->
+    <div class="card" id="card-exp2-1">
+      <div class="card-header" onclick="toggleCard('exp2-1')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习1、创建全零数组</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp2-1')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">创建一个长度为10的一维全为0的数组，然后让第5个元素等于1。</p>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre><span class="kw">import</span> numpy <span class="kw">as</span> np
+
+arr = np.zeros(<span class="num">10</span>)
+<span class="func">print</span>(<span class="str">'原始:'</span>, arr)
+arr[<span class="num">4</span>] = <span class="num">1</span>
+<span class="func">print</span>(<span class="str">'修改后:'</span>, arr)</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习2 -->
+    <div class="card" id="card-exp2-2">
+      <div class="card-header" onclick="toggleCard('exp2-2')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习2、数组索引操作</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp2-2')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">创建一个12-45的一维数组，其中数组内一共有16个元素，将数组输出后，更改第7个元素的值为78，输出第5个到第8个元素的值，输出倒数第7到倒数第10个的元素的值。</p>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre>arr = np.linspace(<span class="num">12</span>, <span class="num">45</span>, <span class="num">16</span>)
+<span class="func">print</span>(<span class="str">'原始:'</span>, arr)
+
+arr[<span class="num">6</span>] = <span class="num">78</span>  <span class="comment"># 第7个元素</span>
+<span class="func">print</span>(<span class="str">'第5-8个:'</span>, arr[<span class="num">4</span>:<span class="num">8</span>])
+<span class="func">print</span>(<span class="str">'倒数第7-10:'</span>, arr[<span class="num">-10</span>:<span class="num">-7</span>])</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习3 -->
+    <div class="card" id="card-exp2-3">
+      <div class="card-header" onclick="toggleCard('exp2-3')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习3、二维数组操作</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp2-3')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">创建一个4X4的二维数组，让数组中的初始值为1，并将练习2中一维数组的值依照顺序存储在此二维数组中。（1）使用索引的方式获取第二行第一列和第三行第二列的数据。（2）获取数组的1,2行第2、3列的数据。（3）获取数组中第二行第2、3列数据。</p>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre>arr2d = np.ones((<span class="num">4</span>, <span class="num">4</span>))
+<span class="comment"># 将一维数组的前16个元素填入</span>
+arr_flat = np.linspace(<span class="num">12</span>, <span class="num">45</span>, <span class="num">16</span>)
+arr2d = arr_flat.reshape(<span class="num">4</span>, <span class="num">4</span>)
+<span class="func">print</span>(arr2d)
+
+<span class="comment"># (1) 第二行第一列、第三行第二列</span>
+<span class="func">print</span>(<span class="str">'第二行第一列:'</span>, arr2d[<span class="num">1</span>, <span class="num">0</span>])
+<span class="func">print</span>(<span class="str">'第三行第二列:'</span>, arr2d[<span class="num">2</span>, <span class="num">1</span>])
+
+<span class="comment"># (2) 1,2行 第2,3列</span>
+<span class="func">print</span>(arr2d[<span class="num">0</span>:<span class="num">2</span>, <span class="num">1</span>:<span class="num">3</span>])
+
+<span class="comment"># (3) 第二行 第2,3列</span>
+<span class="func">print</span>(arr2d[<span class="num">1</span>, <span class="num">1</span>:<span class="num">3</span>])</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习4 -->
+    <div class="card" id="card-exp2-4">
+      <div class="card-header" onclick="toggleCard('exp2-4')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习4、数组比较运算</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp2-4')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p>对超市牛奶价格进行比较：A超市 [19.9, 25, 29.9, 45, 39.9]，B超市 [18.9, 25, 24.9, 49, 35.9]，求差并显示。</p>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre>milk_a = np.array([<span class="num">19.9</span>, <span class="num">25</span>, <span class="num">29.9</span>, <span class="num">45</span>, <span class="num">39.9</span>])
+milk_b = np.array([<span class="num">18.9</span>, <span class="num">25</span>, <span class="num">24.9</span>, <span class="num">49</span>, <span class="num">35.9</span>])
+
+diff = milk_a - milk_b
+<span class="func">print</span>(<span class="str">'A-B差值:'</span>, diff)
+<span class="func">print</span>(<span class="str">'A比B贵的商品:'</span>, np.where(diff > <span class="num">0</span>)[<span class="num">0</span>])</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习5 -->
+    <div class="card" id="card-exp2-5">
+      <div class="card-header" onclick="toggleCard('exp2-5')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习5、6x6数独矩阵</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp2-5')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">创建6X6的简单数独游戏矩阵：（1）创建一个6x6矩阵。（2）矩阵第1行数据为[1,2,3,4,5,6]，第2行数据为[2,3,4,5,6,1]，以此类推，第6行数据为[6,1,2,3,4,5]。最终得到每行数据不同、每列数据也不同的矩阵。</p>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre>matrix = np.array([
+    [<span class="num">1</span>,<span class="num">2</span>,<span class="num">3</span>,<span class="num">4</span>,<span class="num">5</span>,<span class="num">6</span>],
+    [<span class="num">2</span>,<span class="num">3</span>,<span class="num">4</span>,<span class="num">5</span>,<span class="num">6</span>,<span class="num">1</span>],
+    [<span class="num">3</span>,<span class="num">4</span>,<span class="num">5</span>,<span class="num">6</span>,<span class="num">1</span>,<span class="num">2</span>],
+    [<span class="num">4</span>,<span class="num">5</span>,<span class="num">6</span>,<span class="num">1</span>,<span class="num">2</span>,<span class="num">3</span>],
+    [<span class="num">5</span>,<span class="num">6</span>,<span class="num">1</span>,<span class="num">2</span>,<span class="num">3</span>,<span class="num">4</span>],
+    [<span class="num">6</span>,<span class="num">1</span>,<span class="num">2</span>,<span class="num">3</span>,<span class="num">4</span>,<span class="num">5</span>]
+])
+<span class="func">print</span>(matrix)</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习6 -->
+    <div class="card" id="card-exp2-6">
+      <div class="card-header" onclick="toggleCard('exp2-6')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习6、新能源汽车数据分析</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp2-6')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">各大汽车制造商纷纷投入巨资研发新能源汽车，希望通过技术创新占领市场高地。在此背景下，某机构收集了国内主要城市近年来新能源汽车的销售数据，包括成交额数、成交商品件数、成交金额等，数据保存在"新能源汽车销售数据.csv"文件中：（1）读取"新能源汽车销售数据.csv"文件。（2）计算成交商品件数和成交金额的平均值、标准差、最小值和最大值。（3）基于成交金额和成交商品件数，计算每件商品的平均成交金额。（4）上述计算结果显示在窗体中。</p>
+        <div class="tag">新能源汽车销售数据.csv</div>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre><span class="kw">import</span> pandas <span class="kw">as</span> pd
+<span class="kw">import</span> numpy <span class="kw">as</span> np
+
+df = pd.read_csv(<span class="str">'新能源汽车销售数据.csv'</span>)
+
+<span class="comment"># (2) 均值、标准差、最小值、最大值</span>
+<span class="func">print</span>(<span class="str">'成交件数:'</span>)
+<span class="func">print</span>(<span class="str">f'  均值: </span>{df[\"成交商品件数\"].mean():.2f}<span class="str">'</span>)
+<span class="func">print</span>(<span class="str">f'  标准差: </span>{df[\"成交商品件数\"].std():.2f}<span class="str">'</span>)
+<span class="func">print</span>(<span class="str">f'  最小值: </span>{df[\"成交商品件数\"].min()}<span class="str">'</span>)
+<span class="func">print</span>(<span class="str">f'  最大值: </span>{df[\"成交商品件数\"].max()}<span class="str">'</span>)
+
+<span class="comment"># (3) 每件商品平均成交金额</span>
+df[<span class="str">'平均金额'</span>] = df[<span class="str">'成交金额'</span>] / df[<span class="str">'成交商品件数'</span>]
+<span class="func">print</span>(<span class="str">f'每件平均: </span>{df[\"平均金额\"].mean():.2f}<span class="str">'</span>)</pre>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ============ EXPERIMENT 3 ============ -->
+  <section class="experiment fade-in" id="exp3">
+    <div class="exp-header">
+      <h2>第三次实验课：Pandas基础练习</h2>
+      <span class="goal">目标：掌握Pandas的基础用法</span>
+    </div>
+
+    <!-- 练习1 -->
+    <div class="card" id="card-exp3-1">
+      <div class="card-header" onclick="toggleCard('exp3-1')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习1、创建Series对象</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp3-1')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">有数据[87,72,65,88]，创建series对象名为Score，并指定索引为：张三，李四，王二狗，刘芒。（用两种方法实现）</p>
+        <div class="info-box">
+          <strong>思路提示：</strong>可以用 <code>pd.Series(data, index=...)</code> 直接创建，也可以先创建字典再转 Series。
+        </div>
+        <div class="code-block">
+          <div class="code-header"><span>方法一：直接创建</span></div>
+          <pre><span class="kw">import</span> pandas <span class="kw">as</span> pd
+
+score = pd.Series([<span class="num">87</span>, <span class="num">72</span>, <span class="num">65</span>, <span class="num">88</span>],
+                   index=[<span class="str">'张三'</span>, <span class="str">'李四'</span>, <span class="str">'王二狗'</span>, <span class="str">'刘芒'</span>])
+<span class="func">print</span>(score)</pre>
+        </div>
+        <div class="code-block">
+          <div class="code-header"><span>方法二：字典创建</span></div>
+          <pre>data = {<span class="str">'张三'</span>: <span class="num">87</span>, <span class="str">'李四'</span>: <span class="num">72</span>, <span class="str">'王二狗'</span>: <span class="num">65</span>, <span class="str">'刘芒'</span>: <span class="num">88</span>}
+score = pd.Series(data)
+<span class="func">print</span>(score)</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习2 -->
+    <div class="card" id="card-exp3-2">
+      <div class="card-header" onclick="toggleCard('exp3-2')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习2、Series增删操作</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp3-2')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">在1题的对象后面，加入如下数据：原业，70；住友，86。之后，再将王二狗对应的数据删除。</p>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre><span class="comment"># 添加数据</span>
+score[<span class="str">'原业'</span>] = <span class="num">70</span>
+score[<span class="str">'住友'</span>] = <span class="num">86</span>
+
+<span class="comment"># 删除王二狗</span>
+score = score.drop(<span class="str">'王二狗'</span>)
+<span class="func">print</span>(score)</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习3 -->
+    <div class="card" id="card-exp3-3">
+      <div class="card-header" onclick="toggleCard('exp3-3')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习3、创建DataFrame</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp3-3')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">给定数据[[蛋炒饭,15,0.9],[韩式拌饭,20,0.8],[西班牙海鲜饭,45,0.7]]，创建DataFrame，其中，列标识为：名称，价格，折扣，行标识为：a,b,c。</p>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre>data = [[<span class="str">'蛋炒饭'</span>, <span class="num">15</span>, <span class="num">0.9</span>],
+        [<span class="str">'韩式拌饭'</span>, <span class="num">20</span>, <span class="num">0.8</span>],
+        [<span class="str">'西班牙海鲜饭'</span>, <span class="num">45</span>, <span class="num">0.7</span>]]
+
+df = pd.DataFrame(data,
+                  columns=[<span class="str">'名称'</span>, <span class="str">'价格'</span>, <span class="str">'折扣'</span>],
+                  index=[<span class="str">'a'</span>, <span class="str">'b'</span>, <span class="str">'c'</span>])
+<span class="func">print</span>(df)</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习4 -->
+    <div class="card" id="card-exp3-4">
+      <div class="card-header" onclick="toggleCard('exp3-4')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习4、DataFrame基本属性</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp3-4')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">有代码：order1=pd.DataFrame(...) 求其数据形状、列名，行数和列数。</p>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre>order1 = pd.DataFrame(
+    [[<span class="str">'15779'</span>,<span class="str">'鞋子'</span>,<span class="num">203</span>,<span class="str">'2021-4-15'</span>],
+     [<span class="str">'16885'</span>,<span class="str">'裙子'</span>,<span class="num">199</span>,<span class="str">'2021-4-15'</span>],
+     [<span class="str">'16886'</span>,<span class="str">'裤子'</span>,<span class="num">89</span>,<span class="str">'2021-4-16'</span>],
+     [<span class="str">'16887'</span>,<span class="str">'大衣'</span>,<span class="num">708</span>,<span class="str">'2021-4-16'</span>],
+     [<span class="str">'17554'</span>,<span class="str">'背包'</span>,<span class="num">256</span>,<span class="str">'2021-4-17'</span>],
+     [<span class="str">'1756'</span>,<span class="str">'单肩包'</span>,<span class="num">125</span>,<span class="str">'2021-4-17'</span>],
+     [<span class="str">'18221'</span>,<span class="str">'衬衫'</span>,<span class="num">99</span>,<span class="str">'2021-4-18'</span>],
+     [<span class="str">'18223'</span>,<span class="str">'皮带'</span>,<span class="num">620</span>,<span class="str">'2021-4-20'</span>]],
+    columns=[<span class="str">'ID'</span>,<span class="str">'商品'</span>,<span class="str">'价格'</span>,<span class="str">'出售日期'</span>],
+    index=[<span class="num">1</span>,<span class="num">2</span>,<span class="num">3</span>,<span class="num">4</span>,<span class="num">5</span>,<span class="num">6</span>,<span class="num">7</span>,<span class="num">8</span>])
+
+<span class="func">print</span>(<span class="str">'形状:'</span>, order1.shape)
+<span class="func">print</span>(<span class="str">'列名:'</span>, order1.columns.tolist())
+<span class="func">print</span>(<span class="str">'行数:'</span>, order1.shape[<span class="num">0</span>])
+<span class="func">print</span>(<span class="str">'列数:'</span>, order1.shape[<span class="num">1</span>])</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习5 -->
+    <div class="card" id="card-exp3-5">
+      <div class="card-header" onclick="toggleCard('exp3-5')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习5、读取CSV并查看信息</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp3-5')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">读取aodi.csv文件中的内容，并将ID列中内容定义为字符串，并查看头10条数据，输出文件中各列的数据类型。</p>
+        <div class="tag">aodi.csv</div>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre>df = pd.read_csv(<span class="str">'aodi.csv'</span>, dtype={<span class="str">'ID'</span>: <span class="func">str</span>})
+<span class="func">print</span>(df.head(<span class="num">10</span>))
+<span class="func">print</span>(df.dtypes)</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习6 -->
+    <div class="card" id="card-exp3-6">
+      <div class="card-header" onclick="toggleCard('exp3-6')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习6、读取Excel并查看信息</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp3-6')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">读取Car_sale_audi.xlsx文件中数据，查看后最后5行数据，并确认该数据中一共有多少行，查看每一列的数据类型。</p>
+        <div class="tag">Car_sale_audi.xlsx</div>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre>df = pd.read_excel(<span class="str">'Car_sale_audi.xlsx'</span>)
+<span class="func">print</span>(df.tail(<span class="num">5</span>))
+<span class="func">print</span>(<span class="str">'总行数:'</span>, <span class="func">len</span>(df))
+<span class="func">print</span>(df.dtypes)</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习7 -->
+    <div class="card" id="card-exp3-7">
+      <div class="card-header" onclick="toggleCard('exp3-7')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习7、数据合并与保存</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp3-7')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">读取Car_sale_audisa.xlsx文件中的数据，并将这些数据合并如7题中的数据，最后将合并后的数据保存在data_all.csv文件中，data_all.csv文件保存在与Car_sale_audi.xlsx同一个文件夹。</p>
+        <div class="tag">Car_sale_audi.xlsx</div>
+        <div class="tag">Car_sale_audisa.xlsx</div>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre>df1 = pd.read_excel(<span class="str">'Car_sale_audi.xlsx'</span>)
+df2 = pd.read_excel(<span class="str">'Car_sale_audisa.xlsx'</span>)
+data_all = pd.concat([df1, df2], ignore_index=<span class="kw">True</span>)
+data_all.to_csv(<span class="str">'data_all.csv'</span>, index=<span class="kw">False</span>)</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习8 -->
+    <div class="card" id="card-exp3-8">
+      <div class="card-header" onclick="toggleCard('exp3-8')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习8、数据筛选</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp3-8')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">从excel文件Car_sale_audi.xlsx中读取所有数据，查看数据中，屏幕名、消息内容以及来源的相关信息，并将检索结果的前5条显示出来。</p>
+        <div class="tag">Car_sale_audi.xlsx</div>
+        <div class="info-box">
+          <strong>注意：</strong>实际列名需根据文件内容调整，题目中的"屏幕名""转发数"等字段名可能不同。
+        </div>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre>df = pd.read_excel(<span class="str">'Car_sale_audi.xlsx'</span>)
+<span class="func">print</span>(df.columns.tolist())  <span class="comment"># 先看列名</span>
+result = df[[<span class="str">'屏幕名'</span>, <span class="str">'消息内容'</span>, <span class="str">'来源'</span>]].head(<span class="num">5</span>)
+<span class="func">print</span>(result)</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习9 -->
+    <div class="card" id="card-exp3-9">
+      <div class="card-header" onclick="toggleCard('exp3-9')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习9、按行索引查看数据（两种方法）</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp3-9')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">查看8题数据中，第5,10,13,20行的数据（两种方法实现）。</p>
+        <div class="code-block">
+          <div class="code-header"><span>方法一：iloc + 列表</span></div>
+          <pre><span class="func">print</span>(df.iloc[[<span class="num">4</span>, <span class="num">9</span>, <span class="num">12</span>, <span class="num">19</span>]])  <span class="comment"># iloc 从0开始</span></pre>
+        </div>
+        <div class="code-block">
+          <div class="code-header"><span>方法二：用切片拼接</span></div>
+          <pre><span class="func">print</span>(df.iloc[<span class="num">4</span>:<span class="num">5</span>].append(df.iloc[<span class="num">9</span>:<span class="num">10</span>])
+                      .append(df.iloc[<span class="num">12</span>:<span class="num">13</span>])
+                      .append(df.iloc[<span class="num">19</span>:<span class="num">20</span>]))</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习10 -->
+    <div class="card" id="card-exp3-10">
+      <div class="card-header" onclick="toggleCard('exp3-10')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习10、查看指定行列数据（三种方法）</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp3-10')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">查看8题数据中，第3,5,7行数据中，屏幕名、转发数、评论数、赞数的值。（三种方法实现）</p>
+        <div class="code-block">
+          <div class="code-header"><span>方法一：loc</span></div>
+          <pre><span class="func">print</span>(df.loc[df.index[[<span class="num">2</span>,<span class="num">4</span>,<span class="num">6</span>]],
+             [<span class="str">'屏幕名'</span>,<span class="str">'转发数'</span>,<span class="str">'评论数'</span>,<span class="str">'赞数'</span>]])</pre>
+        </div>
+        <div class="code-block">
+          <div class="code-header"><span>方法二：iloc + 列索引</span></div>
+          <pre>cols = [<span class="func">list</span>(df.columns).index(c)
+        <span class="kw">for</span> c <span class="kw">in</span> [<span class="str">'屏幕名'</span>,<span class="str">'转发数'</span>,<span class="str">'评论数'</span>,<span class="str">'赞数'</span>]]
+<span class="func">print</span>(df.iloc[<span class="num">2</span>:<span class="num">7</span>:<span class="num">2</span>, cols])</pre>
+        </div>
+        <div class="code-block">
+          <div class="code-header"><span>方法三：query + loc</span></div>
+          <pre>sub = df.iloc[<span class="num">2</span>:<span class="num">7</span>:<span class="num">2</span>]
+<span class="func">print</span>(sub[[<span class="str">'屏幕名'</span>,<span class="str">'转发数'</span>,<span class="str">'评论数'</span>,<span class="str">'赞数'</span>]])</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习11 -->
+    <div class="card" id="card-exp3-11">
+      <div class="card-header" onclick="toggleCard('exp3-11')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习11、条件筛选</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp3-11')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">查看8题数据中，转发数过100且点赞数不小于10的用户名和消息内容。</p>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre>mask = (df[<span class="str">'转发数'</span>] > <span class="num">100</span>) & (df[<span class="str">'赞数'</span>] >= <span class="num">10</span>)
+<span class="func">print</span>(df.loc[mask, [<span class="str">'屏幕名'</span>, <span class="str">'消息内容'</span>]])</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习12 -->
+    <div class="card" id="card-exp3-12">
+      <div class="card-header" onclick="toggleCard('exp3-12')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习12、统计无缺失值行数</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp3-12')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">查看8题数据中，无缺失值的数据一共有多少。</p>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre><span class="comment"># 方法：逐行判断是否有缺失值，再统计True个数</span>
+no_null = df.dropna()
+<span class="func">print</span>(<span class="str">'无缺失值行数:'</span>, <span class="func">len</span>(no_null))
+
+<span class="comment"># 或者</span>
+<span class="func">print</span>(df.notna().all(axis=<span class="num">1</span>).sum())</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习13 -->
+    <div class="card" id="card-exp3-13">
+      <div class="card-header" onclick="toggleCard('exp3-13')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习13、修改列名为英文</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp3-13')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">将8题数据中，所有的列名改为英文。</p>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre><span class="comment"># 先打印中文列名，再手动映射</span>
+<span class="func">print</span>(df.columns.tolist())
+
+df.columns = [<span class="str">'screen_name'</span>, <span class="str">'content'</span>, <span class="str">'source'</span>,
+              <span class="str">'retweet'</span>, <span class="str">'comment'</span>, <span class="str">'like'</span>]
+<span class="func">print</span>(df.columns.tolist())</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习14 -->
+    <div class="card" id="card-exp3-14">
+      <div class="card-header" onclick="toggleCard('exp3-14')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习14、添加新列</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp3-14')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">在12题数据中，添加一列'流行度'，是转发数和评论数总和。</p>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre>df[<span class="str">'流行度'</span>] = df[<span class="str">'转发数'</span>] + df[<span class="str">'评论数'</span>]
+<span class="func">print</span>(df.head())</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习15 -->
+    <div class="card" id="card-exp3-15">
+      <div class="card-header" onclick="toggleCard('exp3-15')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习15、删除列</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp3-15')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">将14题数据中，转发数和评论数删除。</p>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre>df = df.drop(columns=[<span class="str">'转发数'</span>, <span class="str">'评论数'</span>])
+<span class="func">print</span>(df.columns.tolist())</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习16 -->
+    <div class="card" id="card-exp3-16">
+      <div class="card-header" onclick="toggleCard('exp3-16')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习16、NumPy数组操作</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp3-16')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">创建一个12-45的一维数组，其中数组内一共有16个元素，将数组输出后，更改第7个元素的值为78，输出第5个到第8个元素的值，输出倒数第7到倒数第10个的元素的值。</p>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre><span class="kw">import</span> numpy <span class="kw">as</span> np
+
+arr = np.linspace(<span class="num">12</span>, <span class="num">45</span>, <span class="num">16</span>)
+<span class="func">print</span>(<span class="str">'原始数组:'</span>, arr)
+
+arr[<span class="num">6</span>] = <span class="num">78</span>  <span class="comment"># 第7个元素（索引从0开始）</span>
+<span class="func">print</span>(<span class="str">'第5-8个:'</span>, arr[<span class="num">4</span>:<span class="num">8</span>])
+<span class="func">print</span>(<span class="str">'倒数第7-10个:'</span>, arr[<span class="num">-10</span>:<span class="num">-7</span>])</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习17 -->
+    <div class="card" id="card-exp3-17">
+      <div class="card-header" onclick="toggleCard('exp3-17')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习17、人口数据分析</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp3-17')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">随着我国经济的不断发展，大多数年轻人会前往一线城市谋求发展。我国省份人口数据表记录了部分省份的2022年人口数据和2021年人口数据。（1）读取"中国省份人口数据.csv"文件。（2）查看"中国省份人口数据.csv"文件的维度、大小等信息。（3）使用describe()方法对文件中的人口特征进行描述性统计。（4）使用sum函数对文件中的人口特征求和并计算总人口增长数。</p>
+        <div class="tag">中国城市人口数据.csv</div>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre>df = pd.read_csv(<span class="str">'中国城市人口数据.csv'</span>)
+
+<span class="comment"># (2) 查看维度和大小</span>
+<span class="func">print</span>(<span class="str">'维度:'</span>, df.shape)
+<span class="func">print</span>(<span class="str">'大小:'</span>, df.size)
+
+<span class="comment"># (3) 描述性统计</span>
+<span class="func">print</span>(df.describe())
+
+<span class="comment"># (4) 求和 &amp; 计算增长数</span>
+<span class="func">print</span>(df.sum())
+<span class="func">print</span>(<span class="str">'总人口增长:'</span>,
+      df[<span class="str">'2022年人口'</span>].sum() - df[<span class="str">'2021年人口'</span>].sum())</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习18 -->
+    <div class="card" id="card-exp3-18">
+      <div class="card-header" onclick="toggleCard('exp3-18')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习18、新能源汽车销售数据分析</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp3-18')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">基于"新能源汽车销售数据.csv"文件，使用pandas计算加购率下单率和成交率，对销售数据进行进一步的描述性统计分析和分组分析，具体操作步骤如下（1）使用pandas读取"新能源汽车销售数据.csv"文件。（2）根据访客数、加购商品件数、下单客户数和成交客户数计算加购率、下单率和成交率。（3）使用describe()方法对加购率、下单率和成交率进行描述性统计。（4）将最近上架时间转换为Datetime类型，并提取该时间的月份为新的特征"上架月份"。（5）按照上架月份对数据进行分组，并计算每个月份的加购率、下单率和成交率的平均值。（6）保存修改后的数据为"新能源汽车销售数据_经过第3章处理.csv"。</p>
+        <div class="tag">新能源汽车销售数据.csv</div>
+        <div class="code-block">
+          <div class="code-header"><span>参考代码</span></div>
+          <pre><span class="kw">import</span> pandas <span class="kw">as</span> pd
+
+df = pd.read_csv(<span class="str">'新能源汽车销售数据.csv'</span>)
+
+<span class="comment"># (2) 计算加购率、下单率、成交率</span>
+df[<span class="str">'加购率'</span>] = df[<span class="str">'加购商品件数'</span>] / df[<span class="str">'访客数'</span>]
+df[<span class="str">'下单率'</span>] = df[<span class="str">'下单客户数'</span>] / df[<span class="str">'访客数'</span>]
+df[<span class="str">'成交率'</span>] = df[<span class="str">'成交客户数'</span>] / df[<span class="str">'访客数'</span>]
+
+<span class="comment"># (3) 描述性统计</span>
+<span class="func">print</span>(df[[<span class="str">'加购率'</span>,<span class="str">'下单率'</span>,<span class="str">'成交率'</span>]].describe())
+
+<span class="comment"># (4) 转换时间并提取月份</span>
+df[<span class="str">'最近上架时间'</span>] = pd.to_datetime(df[<span class="str">'最近上架时间'</span>])
+df[<span class="str">'上架月份'</span>] = df[<span class="str">'最近上架时间'</span>].dt.month
+
+<span class="comment"># (5) 按月份分组求均值</span>
+monthly = df.groupby(<span class="str">'上架月份'</span>)[[<span class="str">'加购率'</span>,<span class="str">'下单率'</span>,<span class="str">'成交率'</span>]].mean()
+<span class="func">print</span>(monthly)
+
+<span class="comment"># (6) 保存结果</span>
+df.to_csv(<span class="str">'新能源汽车销售数据_经过第3章处理.csv'</span>, index=<span class="kw">False</span>)</pre>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ============ EXPERIMENT 4 ============ -->
+  <section class="experiment fade-in" id="exp4">
+    <div class="exp-header">
+      <h2>第四次实验课：可视化基础练习</h2>
+      <span class="goal">目标：掌握数据分析中可视化的基础用法</span>
+    </div>
+
+    <!-- 练习1 -->
+    <div class="card" id="card-exp4-1">
+      <div class="card-header" onclick="toggleCard('exp4-1')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area">
+          <h3>练习1、折线图练习</h3>
+        </div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp4-1')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p>在1-10之间的5个等间距数值，以此为基础画出sin函数的折线图。</p>
+        <div class="info-box">
+          <strong>思路提示：</strong>使用 <code>numpy.linspace()</code> 生成等间距数据，再用 <code>numpy.sin()</code> 计算正弦值，最后用 matplotlib 绑定折线图。
+        </div>
+        <div class="sub-title">参考代码</div>
+<pre class="code-block"><span class="kw">import</span> <span class="var">numpy</span> <span class="kw">as</span> <span class="var">np</span>
+<span class="kw">import</span> <span class="var">matplotlib.pyplot</span> <span class="kw">as</span> <span class="var">plt</span>
+
+<span class="cm"># 生成1到10之间的5个等间距数值</span>
+<span class="var">x</span> <span class="op">=</span> <span class="fn">np.linspace</span>(<span class="num">1</span>, <span class="num">10</span>, <span class="num">5</span>)
+
+<span class="cm"># 计算sin值</span>
+<span class="var">y</span> <span class="op">=</span> <span class="fn">np.sin</span>(<span class="var">x</span>)
+
+<span class="cm"># 绘制折线图</span>
+<span class="var">plt</span>.<span class="fn">plot</span>(<span class="var">x</span>, <span class="var">y</span>, <span class="var">marker</span><span class="op">=</span><span class="str">'o'</span>, <span class="var">linestyle</span><span class="op">=</span><span class="str">'-'</span>)
+<span class="var">plt</span>.<span class="fn">title</span>(<span class="str">'sin函数折线图'</span>)
+<span class="var">plt</span>.<span class="fn">xlabel</span>(<span class="str">'x'</span>)
+<span class="var">plt</span>.<span class="fn">ylabel</span>(<span class="str">'sin(x)'</span>)
+<span class="var">plt</span>.<span class="fn">grid</span>(<span class="var">True</span>)
+<span class="var">plt</span>.<span class="fn">show</span>()</pre>
+        <div class="sub-title">关键知识点</div>
+        <ul>
+          <li><code>np.linspace(start, stop, num)</code> — 生成等间距的 num 个数值</li>
+          <li><code>plt.plot(x, y)</code> — 绑定折线图</li>
+          <li><code>marker</code> 参数可添加数据点标记：'o', 's', '^', '*' 等</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 练习2 -->
+    <div class="card" id="card-exp4-2">
+      <div class="card-header" onclick="toggleCard('exp4-2')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习2、散点图练习</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp4-2')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">读懂下列代码后，在程序中实现。</p>
+<pre class="code-block"><span class="kw">import</span> <span class="var">matplotlib.pyplot</span> <span class="kw">as</span> <span class="var">plt</span>
+<span class="kw">import</span> <span class="var">numpy</span> <span class="kw">as</span> <span class="var">np</span>
+
+<span class="var">np</span>.<span class="var">random</span>.<span class="fn">seed</span>(<span class="num">42</span>)
+<span class="var">x</span> <span class="op">=</span> <span class="var">np</span>.<span class="var">random</span>.<span class="fn">rand</span>(<span class="num">50</span>) <span class="op">*</span> <span class="num">100</span>
+<span class="var">y</span> <span class="op">=</span> <span class="var">x</span> <span class="op">+</span> <span class="var">np</span>.<span class="var">random</span>.<span class="fn">randn</span>(<span class="num">50</span>) <span class="op">*</span> <span class="num">10</span>
+
+<span class="var">plt</span>.<span class="fn">scatter</span>(<span class="var">x</span>, <span class="var">y</span>, <span class="var">c</span><span class="op">=</span><span class="str">'steelblue'</span>, <span class="var">alpha</span><span class="op">=</span><span class="num">0.7</span>)
+<span class="var">plt</span>.<span class="fn">title</span>(<span class="str">'散点图示例'</span>)
+<span class="var">plt</span>.<span class="fn">xlabel</span>(<span class="str">'X轴'</span>)
+<span class="var">plt</span>.<span class="fn">ylabel</span>(<span class="str">'Y轴'</span>)
+<span class="var">plt</span>.<span class="fn">show</span>()</pre>
+      </div>
+    </div>
+
+    <!-- 练习3 -->
+    <div class="card" id="card-exp4-3">
+      <div class="card-header" onclick="toggleCard('exp4-3')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习3、代码练习</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp4-3')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">读懂下列代码后，在程序中实现。</p>
+        <div class="info-box">请根据课堂上给出的代码进行练习，在 Jupyter Notebook 中手动输入并运行。</div>
+      </div>
+    </div>
+
+    <!-- 练习4 -->
+    <div class="card" id="card-exp4-4">
+      <div class="card-header" onclick="toggleCard('exp4-4')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习4、随机漫步轨迹（教材P83）</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp4-4')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">利用散点图实现随机漫步的轨迹显示，教材P83页例题。</p>
+        <div class="sub-title">参考代码</div>
+<pre class="code-block"><span class="kw">import</span> <span class="var">numpy</span> <span class="kw">as</span> <span class="var">np</span>
+<span class="kw">import</span> <span class="var">matplotlib.pyplot</span> <span class="kw">as</span> <span class="var">plt</span>
+
+<span class="var">np</span>.<span class="var">random</span>.<span class="fn">seed</span>(<span class="num">0</span>)
+<span class="var">n</span> <span class="op">=</span> <span class="num">1000</span>
+<span class="cm"># 每步随机选择方向和步长</span>
+<span class="var">x</span> <span class="op">=</span> <span class="var">np</span>.<span class="var">random</span>.<span class="fn">randn</span>(<span class="var">n</span>).<span class="fn">cumsum</span>()
+<span class="var">y</span> <span class="op">=</span> <span class="var">np</span>.<span class="var">random</span>.<span class="fn">randn</span>(<span class="var">n</span>).<span class="fn">cumsum</span>()
+
+<span class="var">plt</span>.<span class="fn">figure</span>(<span class="var">figsize</span><span class="op">=</span>(<span class="num">8</span>, <span class="num">6</span>))
+<span class="var">plt</span>.<span class="fn">scatter</span>(<span class="var">x</span>, <span class="var">y</span>, <span class="var">c</span><span class="op">=</span><span class="fn">range</span>(<span class="var">n</span>), <span class="var">cmap</span><span class="op">=</span><span class="str">'viridis'</span>,
+            <span class="var">s</span><span class="op">=</span><span class="num">5</span>, <span class="var">alpha</span><span class="op">=</span><span class="num">0.6</span>)
+<span class="var">plt</span>.<span class="fn">colorbar</span>(<span class="var">label</span><span class="op">=</span><span class="str">'步数'</span>)
+<span class="var">plt</span>.<span class="fn">title</span>(<span class="str">'随机漫步轨迹'</span>)
+<span class="var">plt</span>.<span class="fn">xlabel</span>(<span class="str">'x'</span>)
+<span class="var">plt</span>.<span class="fn">ylabel</span>(<span class="str">'y'</span>)
+<span class="var">plt</span>.<span class="fn">show</span>()</pre>
+        <div class="sub-title">知识点</div>
+        <ul>
+          <li><code>cumsum()</code> — 累积求和，模拟随机游走</li>
+          <li><code>scatter</code> 的 <code>c</code> 参数可根据步数着色</li>
+          <li><code>cmap</code> 选择颜色映射：'viridis', 'plasma', 'coolwarm' 等</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 练习5 -->
+    <div class="card" id="card-exp4-5">
+      <div class="card-header" onclick="toggleCard('exp4-5')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area">
+          <h3>练习5、学生成绩分布（饼图+箱线图）</h3>
+        </div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp4-5')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p>在期末考试后，学校对学生的期末考试成绩及其他特征信息进行了统计，并存为学生成绩特征关系表。共7个特征：性别、自我效能感、考试课程准备情况、数学成绩、阅读成绩、写作成绩和总成绩。</p>
+        <p>将总成绩按区间划分为"不及格"(0~150)、"及格"(150~200)、"良好"(200~250)、"优秀"(250~300) 4个等级，绘制饼图查看各区间人数比例，并绘制箱线图查看3项单科成绩的分散情况。</p>
+        <span class="tag">&#128196; student_grade.xlsx</span>
+        <div class="sub-title">参考代码</div>
+<pre class="code-block"><span class="kw">import</span> <span class="var">pandas</span> <span class="kw">as</span> <span class="var">pd</span>
+<span class="kw">import</span> <span class="var">matplotlib.pyplot</span> <span class="kw">as</span> <span class="var">plt</span>
+
+<span class="var">plt</span>.<span class="fn">rcParams</span>[<span class="str">'font.sans-serif'</span>] <span class="op">=</span> [<span class="str">'SimHei'</span>]
+<span class="var">plt</span>.<span class="fn">rcParams</span>[<span class="str">'axes.unicode_minus'</span>] <span class="op">=</span> <span class="var">False</span>
+
+<span class="var">df</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">read_excel</span>(<span class="str">'student_grade.xlsx'</span>)
+
+<span class="cm"># 成绩分级</span>
+<span class="var">bins</span> <span class="op">=</span> [<span class="num">0</span>, <span class="num">150</span>, <span class="num">200</span>, <span class="num">250</span>, <span class="num">300</span>]
+<span class="var">labels</span> <span class="op">=</span> [<span class="str">'不及格'</span>, <span class="str">'及格'</span>, <span class="str">'良好'</span>, <span class="str">'优秀'</span>]
+<span class="var">df</span>[<span class="str">'等级'</span>] <span class="op">=</span> <span class="var">pd</span>.<span class="fn">cut</span>(<span class="var">df</span>[<span class="str">'总成绩'</span>], <span class="var">bins</span><span class="op">=</span><span class="var">bins</span>, <span class="var">labels</span><span class="op">=</span><span class="var">labels</span>)
+
+<span class="cm"># 饼图</span>
+<span class="var">counts</span> <span class="op">=</span> <span class="var">df</span>[<span class="str">'等级'</span>].<span class="fn">value_counts</span>()
+<span class="var">plt</span>.<span class="fn">figure</span>(<span class="var">figsize</span><span class="op">=</span>(<span class="num">6</span>, <span class="num">6</span>))
+<span class="var">plt</span>.<span class="fn">pie</span>(<span class="var">counts</span>, <span class="var">labels</span><span class="op">=</span><span class="var">counts</span>.<span class="var">index</span>,
+        <span class="var">autopct</span><span class="op">=</span><span class="str">'%1.1f%%'</span>, <span class="var">startangle</span><span class="op">=</span><span class="num">90</span>)
+<span class="var">plt</span>.<span class="fn">title</span>(<span class="str">'总成绩等级分布'</span>)
+<span class="var">plt</span>.<span class="fn">show</span>()
+
+<span class="cm"># 箱线图</span>
+<span class="var">plt</span>.<span class="fn">figure</span>(<span class="var">figsize</span><span class="op">=</span>(<span class="num">8</span>, <span class="num">5</span>))
+<span class="var">df</span>[[<span class="str">'数学成绩'</span>, <span class="str">'阅读成绩'</span>, <span class="str">'写作成绩'</span>]].<span class="fn">boxplot</span>()
+<span class="var">plt</span>.<span class="fn">title</span>(<span class="str">'单科成绩箱线图'</span>)
+<span class="var">plt</span>.<span class="fn">ylabel</span>(<span class="str">'分数'</span>)
+<span class="var">plt</span>.<span class="fn">show</span>()</pre>
+      </div>
+    </div>
+
+    <!-- 练习6 -->
+    <div class="card" id="card-exp4-6">
+      <div class="card-header" onclick="toggleCard('exp4-6')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area">
+          <h3>练习6、自我效能感/准备情况与总成绩关系（柱形图）</h3>
+        </div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp4-6')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">为了解学生的自我效能感、考试课程准备情况这两个特征与总成绩之间是否存在一些关系，基于练习5的数据对这两个特征下不同值所对应的学生总成绩求均值，绘制柱形图，分别查看自我效能感、考试课程准备情况与总成绩的关系，并对结果进行分析。</p>
+        <span class="tag">&#128196; student_grade.xlsx</span>
+        <div class="sub-title">参考代码</div>
+<pre class="code-block"><span class="kw">import</span> <span class="var">pandas</span> <span class="kw">as</span> <span class="var">pd</span>
+<span class="kw">import</span> <span class="var">matplotlib.pyplot</span> <span class="kw">as</span> <span class="var">plt</span>
+
+<span class="var">plt</span>.<span class="fn">rcParams</span>[<span class="str">'font.sans-serif'</span>] <span class="op">=</span> [<span class="str">'SimHei'</span>]
+<span class="var">df</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">read_excel</span>(<span class="str">'student_grade.xlsx'</span>)
+
+<span class="cm"># 自我效能感与总成绩均值</span>
+<span class="var">group1</span> <span class="op">=</span> <span class="var">df</span>.<span class="fn">groupby</span>(<span class="str">'自我效能感'</span>)[<span class="str">'总成绩'</span>].<span class="fn">mean</span>()
+
+<span class="cm"># 考试课程准备情况与总成绩均值</span>
+<span class="var">group2</span> <span class="op">=</span> <span class="var">df</span>.<span class="fn">groupby</span>(<span class="str">'考试课程准备情况'</span>)[<span class="str">'总成绩'</span>].<span class="fn">mean</span>()
+
+<span class="cm"># 绑定柱形图</span>
+<span class="var">fig</span>, <span class="var">axes</span> <span class="op">=</span> <span class="var">plt</span>.<span class="fn">subplots</span>(<span class="num">1</span>, <span class="num">2</span>, <span class="var">figsize</span><span class="op">=</span>(<span class="num">12</span>, <span class="num">5</span>))
+
+<span class="var">group1</span>.<span class="fn">plot</span>(<span class="var">kind</span><span class="op">=</span><span class="str">'bar'</span>, <span class="var">ax</span><span class="op">=</span><span class="var">axes</span>[<span class="num">0</span>], <span class="var">color</span><span class="op">=</span><span class="str">'steelblue'</span>)
+<span class="var">axes</span>[<span class="num">0</span>].<span class="fn">set_title</span>(<span class="str">'自我效能感 vs 总成绩均值'</span>)
+<span class="var">axes</span>[<span class="num">0</span>].<span class="fn">set_ylabel</span>(<span class="str">'平均总成绩'</span>)
+
+<span class="var">group2</span>.<span class="fn">plot</span>(<span class="var">kind</span><span class="op">=</span><span class="str">'bar'</span>, <span class="var">ax</span><span class="op">=</span><span class="var">axes</span>[<span class="num">1</span>], <span class="var">color</span><span class="op">=</span><span class="str">'coral'</span>)
+<span class="var">axes</span>[<span class="num">1</span>].<span class="fn">set_title</span>(<span class="str">'考试准备情况 vs 总成绩均值'</span>)
+<span class="var">axes</span>[<span class="num">1</span>].<span class="fn">set_ylabel</span>(<span class="str">'平均总成绩'</span>)
+
+<span class="var">plt</span>.<span class="fn">tight_layout</span>()
+<span class="var">plt</span>.<span class="fn">show</span>()</pre>
+      </div>
+    </div>
+
+    <!-- 练习7 -->
+    <div class="card" id="card-exp4-7">
+      <div class="card-header" onclick="toggleCard('exp4-7')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习7、代码练习</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp4-7')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">读懂下列代码后，在程序中实现。</p>
+        <div class="info-box">请根据课堂上给出的代码进行练习。</div>
+      </div>
+    </div>
+
+    <!-- 练习8 -->
+    <div class="card" id="card-exp4-8">
+      <div class="card-header" onclick="toggleCard('exp4-8')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area">
+          <h3>练习8、空气质量热力图分析</h3>
+        </div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp4-8')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">"推动绿色发展，促进人与自然和谐共生"是人类共同的责任。近年来，我国生态环境得到显著改善。空气质量指数(AirQuality Index，AQI)是能够对空气质量进行定量描述的指标。空气质量(Airquality)反映了空气污染程度，它是依据空气中污染物的浓度来判断的。空气污染是一个复杂的现象，空气污染物浓度受到许多因素的影响。绘制热力图，分析各空气质量指标与AQI之间的相关性。</p>
+        <span class="tag">&#128196; aqi.csv</span>
+        <div class="sub-title">参考代码</div>
+<pre class="code-block"><span class="kw">import</span> <span class="var">pandas</span> <span class="kw">as</span> <span class="var">pd</span>
+<span class="kw">import</span> <span class="var">matplotlib.pyplot</span> <span class="kw">as</span> <span class="var">plt</span>
+<span class="kw">import</span> <span class="var">seaborn</span> <span class="kw">as</span> <span class="var">sns</span>
+
+<span class="var">plt</span>.<span class="fn">rcParams</span>[<span class="str">'font.sans-serif'</span>] <span class="op">=</span> [<span class="str">'SimHei'</span>]
+<span class="var">df</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">read_csv</span>(<span class="str">'aqi.csv'</span>)
+
+<span class="cm"># 计算相关系数矩阵</span>
+<span class="var">corr</span> <span class="op">=</span> <span class="var">df</span>.<span class="fn">corr</span>()
+
+<span class="cm"># 绑定热力图</span>
+<span class="var">plt</span>.<span class="fn">figure</span>(<span class="var">figsize</span><span class="op">=</span>(<span class="num">10</span>, <span class="num">8</span>))
+<span class="var">sns</span>.<span class="fn">heatmap</span>(<span class="var">corr</span>, <span class="var">annot</span><span class="op">=</span><span class="var">True</span>, <span class="var">cmap</span><span class="op">=</span><span class="str">'coolwarm'</span>,
+            <span class="var">fmt</span><span class="op">=</span><span class="str">'.2f'</span>, <span class="var">linewidths</span><span class="op">=</span><span class="num">0.5</span>)
+<span class="var">plt</span>.<span class="fn">title</span>(<span class="str">'空气质量指标相关性热力图'</span>)
+<span class="var">plt</span>.<span class="fn">show</span>()</pre>
+        <div class="info-box">
+          <strong>分析要点：</strong>观察热力图中各指标与 AQI 的相关系数。越接近1或-1表示相关性越强；越接近0表示相关性越弱。颜色越深红表示正相关越强，越深蓝表示负相关越强。
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习9 -->
+    <div class="card" id="card-exp4-9">
+      <div class="card-header" onclick="toggleCard('exp4-9')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area">
+          <h3>练习9、综合练习——房价数据分析</h3>
+        </div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp4-9')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">某地区房地产商对近几年的房屋交易情况进行了统计，并将统计结果存放在房价特征关系表(house_price.xlsx)中，共有414条数据，特征包括交易年份、房屋年龄、离地铁站的距离、附近的商店数和单位面积的房价。房价特征关系表的部分数据如下表所示。为了更好地查看近几年的房屋销售情况以及了解房屋相关特征与单位面积的房价间的关系，需要对房价特征关系表的数据进行可视化展示，主要步骤如下。（1）读取房价特征关系表(house_price.xlsx)，绘制离地铁站的距离与单位面积的房价的散点图，并对其进行分析。（2）创建新画布，绘制附近的商店数与单位面积的房价的柱形图，并对其进行分析。（3）创建新画布，根据交易年份绘制饼图，并查看交易年份的分布情况。（4）创建新画布，在子图上分别绘制房屋年龄、离地铁站的距离、附近的商店数、单位面积的房价这4个特征的箱线图，查看是否存在异常值。</p>
+        <span class="tag">&#128196; house_price.xlsx</span>
+
+        <div class="sub-title">(1) 散点图：离地铁站距离 vs 单位面积房价</div>
+<pre class="code-block"><span class="kw">import</span> <span class="var">pandas</span> <span class="kw">as</span> <span class="var">pd</span>
+<span class="kw">import</span> <span class="var">matplotlib.pyplot</span> <span class="kw">as</span> <span class="var">plt</span>
+
+<span class="var">plt</span>.<span class="fn">rcParams</span>[<span class="str">'font.sans-serif'</span>] <span class="op">=</span> [<span class="str">'SimHei'</span>]
+<span class="var">df</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">read_excel</span>(<span class="str">'house_price.xlsx'</span>)
+
+<span class="var">plt</span>.<span class="fn">figure</span>(<span class="var">figsize</span><span class="op">=</span>(<span class="num">8</span>, <span class="num">5</span>))
+<span class="var">plt</span>.<span class="fn">scatter</span>(<span class="var">df</span>[<span class="str">'离地铁站的距离'</span>], <span class="var">df</span>[<span class="str">'单位面积的房价'</span>],
+            <span class="var">alpha</span><span class="op">=</span><span class="num">0.5</span>, <span class="var">c</span><span class="op">=</span><span class="str">'steelblue'</span>)
+<span class="var">plt</span>.<span class="fn">xlabel</span>(<span class="str">'离地铁站的距离'</span>)
+<span class="var">plt</span>.<span class="fn">ylabel</span>(<span class="str">'单位面积的房价'</span>)
+<span class="var">plt</span>.<span class="fn">title</span>(<span class="str">'离地铁站距离与房价散点图'</span>)
+<span class="var">plt</span>.<span class="fn">show</span>()</pre>
+
+        <div class="sub-title">(2) 柱形图：附近商店数 vs 单位面积房价</div>
+<pre class="code-block"><span class="var">group</span> <span class="op">=</span> <span class="var">df</span>.<span class="fn">groupby</span>(<span class="str">'附近的商店数'</span>)[<span class="str">'单位面积的房价'</span>].<span class="fn">mean</span>()
+<span class="var">plt</span>.<span class="fn">figure</span>(<span class="var">figsize</span><span class="op">=</span>(<span class="num">10</span>, <span class="num">5</span>))
+<span class="var">group</span>.<span class="fn">plot</span>(<span class="var">kind</span><span class="op">=</span><span class="str">'bar'</span>, <span class="var">color</span><span class="op">=</span><span class="str">'coral'</span>)
+<span class="var">plt</span>.<span class="fn">title</span>(<span class="str">'附近商店数与单位面积房价'</span>)
+<span class="var">plt</span>.<span class="fn">ylabel</span>(<span class="str">'平均单位面积房价'</span>)
+<span class="var">plt</span>.<span class="fn">show</span>()</pre>
+
+        <div class="sub-title">(3) 饼图：交易年份分布</div>
+<pre class="code-block"><span class="var">year_counts</span> <span class="op">=</span> <span class="var">df</span>[<span class="str">'交易年份'</span>].<span class="fn">value_counts</span>().<span class="fn">sort_index</span>()
+<span class="var">plt</span>.<span class="fn">figure</span>(<span class="var">figsize</span><span class="op">=</span>(<span class="num">7</span>, <span class="num">7</span>))
+<span class="var">plt</span>.<span class="fn">pie</span>(<span class="var">year_counts</span>, <span class="var">labels</span><span class="op">=</span><span class="var">year_counts</span>.<span class="var">index</span>.<span class="fn">astype</span>(<span class="fn">str</span>),
+        <span class="var">autopct</span><span class="op">=</span><span class="str">'%1.1f%%'</span>, <span class="var">startangle</span><span class="op">=</span><span class="num">90</span>)
+<span class="var">plt</span>.<span class="fn">title</span>(<span class="str">'交易年份分布'</span>)
+<span class="var">plt</span>.<span class="fn">show</span>()</pre>
+
+        <div class="sub-title">(4) 子图箱线图：检查异常值</div>
+<pre class="code-block"><span class="var">features</span> <span class="op">=</span> [<span class="str">'房屋年龄'</span>, <span class="str">'离地铁站的距离'</span>,
+            <span class="str">'附近的商店数'</span>, <span class="str">'单位面积的房价'</span>]
+<span class="var">fig</span>, <span class="var">axes</span> <span class="op">=</span> <span class="var">plt</span>.<span class="fn">subplots</span>(<span class="num">1</span>, <span class="num">4</span>, <span class="var">figsize</span><span class="op">=</span>(<span class="num">16</span>, <span class="num">5</span>))
+<span class="kw">for</span> <span class="var">i</span>, <span class="var">f</span> <span class="kw">in</span> <span class="fn">enumerate</span>(<span class="var">features</span>):
+    <span class="var">df</span>[<span class="var">f</span>].<span class="fn">plot</span>(<span class="var">kind</span><span class="op">=</span><span class="str">'box'</span>, <span class="var">ax</span><span class="op">=</span><span class="var">axes</span>[<span class="var">i</span>])
+    <span class="var">axes</span>[<span class="var">i</span>].<span class="fn">set_title</span>(<span class="var">f</span>)
+<span class="var">plt</span>.<span class="fn">suptitle</span>(<span class="str">'特征箱线图（异常值检测）'</span>)
+<span class="var">plt</span>.<span class="fn">tight_layout</span>()
+<span class="var">plt</span>.<span class="fn">show</span>()</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ EXPERIMENT 5 ============ -->
+  <section class="experiment fade-in" id="exp5">
+    <div class="exp-header" style="background: linear-gradient(135deg, #38a169 0%, #2b6cb0 100%);">
+      <h2>第五次实验课：数据预处理练习一</h2>
+      <span class="goal">目标：掌握数据合并基础用法</span>
+    </div>
+
+    <!-- 练习1 -->
+    <div class="card" id="card-exp5-1">
+      <div class="card-header" onclick="toggleCard('exp5-1')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习1、concat 沿X轴拼接</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp5-1')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">（1）读取user_all_info.csv文件中的数据，并查看数据的构成形式和列名。（2）读懂下图代码后，在程序中实现。（3）尝试取出数据集中第1行到第5行中前3列数据，再取出第3行到第6行的数据，之后将两次取出的数据集按照X轴方向拼接。</p>
+        <span class="tag">&#128196; user_all_info.csv</span>
+        <div class="sub-title">参考代码</div>
+<pre class="code-block"><span class="kw">import</span> <span class="var">pandas</span> <span class="kw">as</span> <span class="var">pd</span>
+
+<span class="var">df</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">read_csv</span>(<span class="str">'user_all_info.csv'</span>)
+<span class="fn">print</span>(<span class="var">df</span>.<span class="fn">shape</span>)       <span class="cm"># 查看数据维度</span>
+<span class="fn">print</span>(<span class="var">df</span>.<span class="var">columns</span>)     <span class="cm"># 查看列名</span>
+<span class="fn">print</span>(<span class="var">df</span>.<span class="fn">head</span>())       <span class="cm"># 查看前5行</span>
+
+<span class="cm"># 取子集</span>
+<span class="var">part1</span> <span class="op">=</span> <span class="var">df</span>.<span class="fn">iloc</span>[<span class="num">0</span>:<span class="num">5</span>, <span class="num">0</span>:<span class="num">3</span>]   <span class="cm"># 第1-5行，前3列</span>
+<span class="var">part2</span> <span class="op">=</span> <span class="var">df</span>.<span class="fn">iloc</span>[<span class="num">2</span>:<span class="num">6</span>]         <span class="cm"># 第3-6行</span>
+
+<span class="cm"># 按X轴方向（axis=1，列方向）拼接</span>
+<span class="var">result</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">concat</span>([<span class="var">part1</span>, <span class="var">part2</span>], <span class="var">axis</span><span class="op">=</span><span class="num">1</span>)
+<span class="fn">print</span>(<span class="var">result</span>)</pre>
+        <div class="info-box">
+          <strong>concat 参数说明：</strong><br>
+          <code>axis=0</code> — 沿Y轴（行方向）拼接<br>
+          <code>axis=1</code> — 沿X轴（列方向）拼接<br>
+          <code>ignore_index=True</code> — 重新编号索引
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习2 -->
+    <div class="card" id="card-exp5-2">
+      <div class="card-header" onclick="toggleCard('exp5-2')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习2、concat 沿Y轴链接</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp5-2')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">（1）读懂下列代码后，在程序中实现。（2）尝试分别读取第1列到第5列的前10行、第3列到第6列的前10行，再按照Y轴方向链接起来，并与（1）中的结果进行对比，进一步理解concat函数。</p>
+        <span class="tag">&#128196; user_all_info.csv</span>
+        <div class="sub-title">参考代码</div>
+<pre class="code-block"><span class="cm"># Y轴方向链接（axis=0，行方向拼接）</span>
+<span class="var">part_a</span> <span class="op">=</span> <span class="var">df</span>.<span class="fn">iloc</span>[<span class="num">0</span>:<span class="num">10</span>, <span class="num">0</span>:<span class="num">5</span>]   <span class="cm"># 前10行，第1-5列</span>
+<span class="var">part_b</span> <span class="op">=</span> <span class="var">df</span>.<span class="fn">iloc</span>[<span class="num">0</span>:<span class="num">10</span>, <span class="num">2</span>:<span class="num">6</span>]   <span class="cm"># 前10行，第3-6列</span>
+
+<span class="cm"># 按Y轴方向拼接（行数增加）</span>
+<span class="var">result_y</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">concat</span>([<span class="var">part_a</span>, <span class="var">part_b</span>], <span class="var">axis</span><span class="op">=</span><span class="num">0</span>)
+<span class="fn">print</span>(<span class="var">result_y</span>)
+
+<span class="cm"># 对比 axis=1 的效果（列数增加）</span>
+<span class="var">result_x</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">concat</span>([<span class="var">part_a</span>, <span class="var">part_b</span>], <span class="var">axis</span><span class="op">=</span><span class="num">1</span>)
+<span class="fn">print</span>(<span class="var">result_x</span>)</pre>
+      </div>
+    </div>
+
+    <!-- 练习3 -->
+    <div class="card" id="card-exp5-3">
+      <div class="card-header" onclick="toggleCard('exp5-3')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习3、merge vs join 对比</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp5-3')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">（1）读取user_pay_info.csv和user_download.csv文件中的数据，并查看数据的构成形式和列名。（2）读懂下图代码后，在程序中实现。（3）尝试使用join方法，实现（2）中的功能，并体会两种方法的区别。</p>
+        <span class="tag">&#128196; user_pay_info.csv</span>
+        <span class="tag">&#128196; user_download.csv</span>
+        <div class="sub-title">merge vs join 对比</div>
+<pre class="code-block"><span class="var">pay</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">read_csv</span>(<span class="str">'user_pay_info.csv'</span>)
+<span class="var">dl</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">read_csv</span>(<span class="str">'user_download.csv'</span>)
+
+<span class="cm"># ---- merge：通过键（key）合并 ----</span>
+<span class="var">merged</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">merge</span>(<span class="var">pay</span>, <span class="var">dl</span>, <span class="var">on</span><span class="op">=</span><span class="str">'user_id'</span>, <span class="var">how</span><span class="op">=</span><span class="str">'inner'</span>)
+<span class="fn">print</span>(<span class="str">'merge结果:'</span>, <span class="var">merged</span>.<span class="fn">shape</span>)
+
+<span class="cm"># ---- join：通过索引（index）合并 ----</span>
+<span class="var">joined</span> <span class="op">=</span> <span class="var">pay</span>.<span class="fn">set_index</span>(<span class="str">'user_id'</span>).<span class="fn">join</span>(
+    <span class="var">dl</span>.<span class="fn">set_index</span>(<span class="str">'user_id'</span>), <span class="var">how</span><span class="op">=</span><span class="str">'inner'</span>
+)
+<span class="fn">print</span>(<span class="str">'join结果:'</span>, <span class="var">joined</span>.<span class="fn">shape</span>)</pre>
+        <div class="info-box">
+          <strong>核心区别：</strong><br>
+          &bull; <code>merge()</code> 基于 <strong>列（key）</strong>进行合并，类似 SQL 的 JOIN<br>
+          &bull; <code>join()</code> 基于 <strong>索引（index）</strong>进行合并<br>
+          &bull; <code>how</code> 参数：'inner'(交集)、'left'(左表)、'right'(右表)、'outer'(并集)
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习4 -->
+    <div class="card" id="card-exp5-4">
+      <div class="card-header" onclick="toggleCard('exp5-4')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习4、重叠合并（combine_first）</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp5-4')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">读懂下图代码后，在程序中实现，并认真理解什么是重叠合并。</p>
+        <div class="sub-title">参考代码</div>
+<pre class="code-block"><span class="cm"># 重叠合并：当两个DataFrame有重叠列时，用第二个填充第一个的空值</span>
+<span class="var">df1</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">DataFrame</span>({
+    <span class="str">'A'</span>: [<span class="num">1</span>, <span class="num">2</span>, <span class="var">None</span>],
+    <span class="str">'B'</span>: [<span class="num">4</span>, <span class="var">None</span>, <span class="num">6</span>]
+})
+
+<span class="var">df2</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">DataFrame</span>({
+    <span class="str">'A'</span>: [<span class="num">10</span>, <span class="num">20</span>, <span class="num">30</span>],
+    <span class="str">'B'</span>: [<span class="num">40</span>, <span class="num">50</span>, <span class="num">60</span>],
+    <span class="str">'C'</span>: [<span class="num">7</span>, <span class="num">8</span>, <span class="num">9</span>]
+})
+
+<span class="cm"># combine_first：用df2的值填补df1中的空值</span>
+<span class="var">result</span> <span class="op">=</span> <span class="var">df1</span>.<span class="fn">combine_first</span>(<span class="var">df2</span>)
+<span class="fn">print</span>(<span class="var">result</span>)</pre>
+        <div class="info-box">
+          <strong>重叠合并（combine_first）：</strong>先取第一个 DataFrame 的数据，若存在缺失值(NaN)，则用第二个 DataFrame 对应位置的值填充。适用于数据修复、补全缺失数据的场景。
+        </div>
+      </div>
+    </div>
+
+    <!-- 练习5 -->
+    <div class="card" id="card-exp5-5">
+      <div class="card-header" onclick="toggleCard('exp5-5')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area">
+          <h3>练习5、中风患者数据合并（应用题）</h3>
+        </div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp5-5')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">我国始终把保障人民健康放在优先发展的战略位置。"上医治未病"，建立疾病预防控制体系有利于从源头上预防和控制重大疾病。某医院为了早期监测预警患者的中风风险，对现有中风患者的基础信息和体检数据表(healthcare-dataset-stroke.xlsx)进行分析。经观察发现患者基础信息和体检数据中缺少中风患者的年龄和平均血糖的信息，然而在年龄和平均血糖数据表(healthcare-dataset-age_abs.xlsx)中存放了分析所需的中风患者的年龄和平均血糖信息。现需要对患者的年龄平均血糖数据与患者基础信息和体检数据进行合并，以便进行下一步分析。</p>
+        <span class="tag">&#128196; healthcare-dataset-stroke.xlsx</span>
+        <span class="tag">&#128196; healthcare-dataset-age_abs.xlsx</span>
+        <div class="sub-title">参考代码</div>
+<pre class="code-block"><span class="kw">import</span> <span class="var">pandas</span> <span class="kw">as</span> <span class="var">pd</span>
+
+<span class="cm"># 读取两个数据表</span>
+<span class="var">stroke_df</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">read_excel</span>(<span class="str">'healthcare-dataset-stroke.xlsx'</span>)
+<span class="var">age_df</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">read_excel</span>(<span class="str">'healthcare-dataset-age_abs.xlsx'</span>)
+
+<span class="fn">print</span>(<span class="str">'stroke数据:'</span>, <span class="var">stroke_df</span>.<span class="fn">shape</span>)
+<span class="fn">print</span>(<span class="str">'age数据:'</span>, <span class="var">age_df</span>.<span class="fn">shape</span>)
+
+<span class="cm"># 查看两个表的共同列（用于合并键）</span>
+<span class="fn">print</span>(<span class="str">'共同列:'</span>, <span class="fn">set</span>(<span class="var">stroke_df</span>.<span class="var">columns</span>) <span class="op">&</span> <span class="fn">set</span>(<span class="var">age_df</span>.<span class="var">columns</span>))
+
+<span class="cm"># 使用merge合并（根据共同的ID列）</span>
+<span class="var">merged</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">merge</span>(<span class="var">stroke_df</span>, <span class="var">age_df</span>, <span class="var">on</span><span class="op">=</span><span class="str">'id'</span>, <span class="var">how</span><span class="op">=</span><span class="str">'left'</span>)
+<span class="fn">print</span>(<span class="str">'合并后:'</span>, <span class="var">merged</span>.<span class="fn">shape</span>)
+<span class="fn">print</span>(<span class="var">merged</span>.<span class="fn">head</span>())</pre>
+        <div class="info-box">
+          <strong>提示：</strong>使用 <code>how='left'</code> 保留基础信息表中的所有记录，对于没有匹配的年龄和血糖数据，对应值会显示为 NaN。
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ EXPERIMENT 6 ============ -->
+  <section class="experiment fade-in" id="exp6">
+    <div class="exp-header" style="background: linear-gradient(135deg, #e53e3e 0%, #d69e2e 100%);">
+      <h2>第六次实验课：数据预处理练习二</h2>
+      <span class="goal">目标：掌握数据清洗、数据标准化及数据变换基础用法</span>
+    </div>
+
+    <!-- 练习1 -->
+    <div class="card" id="card-exp6-1">
+      <div class="card-header" onclick="toggleCard('exp6-1')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习1、缺失值处理</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp6-1')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">读懂下图代码，充分了解其功能后，在程序中实现。</p>
+        <div class="tag">user_all_info.csv</div>
+        <div class="info-box">
+          <strong>知识点：</strong><code>isnull().sum()</code> 统计缺失值、<code>dropna()</code> 删除含缺失值的行、<code>fillna()</code> 填充缺失值。
+        </div>
+<pre class="code-block"><span class="kw">import</span> <span class="var">pandas</span> <span class="kw">as</span> <span class="var">pd</span>
+
+<span class="var">all_info</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">read_csv</span>(<span class="str">'../data/user_all_info.csv'</span>)
+<span class="fn">print</span>(<span class="str">'all_info每个特征缺失值的数目为: \n'</span>, <span class="var">all_info</span>.<span class="fn">isnull</span>().<span class="fn">sum</span>())
+<span class="fn">print</span>(<span class="str">'all_info每个特征非缺失值的数目为: \n'</span>, <span class="var">all_info</span>.<span class="fn">notnull</span>().<span class="fn">sum</span>())
+
+<span class="fn">print</span>(<span class="str">'去除缺失的行前all_info的形状为:'</span>, <span class="var">all_info</span>.<span class="fn">shape</span>)
+<span class="var">all_info1</span> <span class="op">=</span> <span class="var">all_info</span>.<span class="fn">dropna</span>(<span class="var">axis</span><span class="op">=</span><span class="num">0</span>, <span class="var">how</span><span class="op">=</span><span class="str">'any'</span>)
+<span class="fn">print</span>(<span class="str">'去除缺失的行后all_info的形状为:'</span>, <span class="var">all_info1</span>.<span class="fn">shape</span>)
+
+<span class="var">mean_num</span> <span class="op">=</span> <span class="var">all_info</span>[<span class="str">'每月支出/元'</span>].<span class="fn">mean</span>()
+<span class="cm"># 缺失值替换为均值</span>
+<span class="var">all_info</span>[<span class="str">'每月支出/元'</span>] <span class="op">=</span> <span class="var">all_info</span>[<span class="str">'每月支出/元'</span>].<span class="fn">fillna</span>(<span class="var">mean_num</span>)
+<span class="fn">print</span>(<span class="str">'每月支出特征缺失值的数目为: \n'</span>, <span class="var">all_info</span>[<span class="str">'每月支出/元'</span>].<span class="fn">isnull</span>().<span class="fn">sum</span>())
+<span class="var">all_info1</span>.<span class="fn">to_csv</span>(<span class="str">'../tmp/all_info_notnull.csv'</span>, <span class="var">index</span><span class="op">=</span><span class="var">False</span>)</pre>
+      </div>
+    </div>
+
+    <!-- 练习2 -->
+    <div class="card" id="card-exp6-2">
+      <div class="card-header" onclick="toggleCard('exp6-2')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习2、重复值处理</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp6-2')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">读懂下列代码后，充分了解其功能后，在程序中实现。</p>
+        <div class="tag">user_download.csv</div>
+        <div class="tag">user_all_info.csv</div>
+        <div class="info-box">
+          <strong>知识点：</strong><code>drop_duplicates()</code> 删除重复行，<code>subset</code> 参数指定按哪些列判断重复。
+        </div>
+<pre class="code-block"><span class="var">download</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">read_csv</span>(<span class="str">'../data/user_download.csv'</span>, <span class="var">encoding</span><span class="op">=</span><span class="str">'gbk'</span>)
+<span class="var">download_select</span> <span class="op">=</span> <span class="var">download</span>[<span class="str">'是否愿意下载'</span>].<span class="fn">drop_duplicates</span>()
+<span class="fn">print</span>(<span class="str">'使用 drop_duplicates() 方法去重之后下载意愿选项总数为:'</span>, <span class="fn">len</span>(<span class="var">download_select</span>))
+
+<span class="var">all_info</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">read_csv</span>(<span class="str">'../data/user_all_info.csv'</span>)
+<span class="fn">print</span>(<span class="str">'去重之前用户信息表的形状为:'</span>, <span class="var">all_info</span>.<span class="fn">shape</span>)
+<span class="var">shape_det</span> <span class="op">=</span> <span class="var">all_info</span>.<span class="fn">drop_duplicates</span>(<span class="var">subset</span><span class="op">=</span>[<span class="str">'用户编号'</span>, <span class="str">'编号'</span>]).<span class="fn">shape</span>
+<span class="fn">print</span>(<span class="str">'依照用户编号、编号去重之后用户信息表的形状为:'</span>, <span class="var">shape_det</span>)</pre>
+      </div>
+    </div>
+
+    <!-- 练习3 -->
+    <div class="card" id="card-exp6-3">
+      <div class="card-header" onclick="toggleCard('exp6-3')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习3、异常值识别（3σ原则）</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp6-3')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">读懂下列代码后，充分了解其功能后，在程序中实现。</p>
+        <div class="tag">all_info_notnull.csv</div>
+        <div class="info-box">
+          <strong>3σ原则：</strong>数据落在均值 ± 3倍标准差 之外视为异常值。公式：<code>|x - mean| > 3 × std</code>
+        </div>
+<pre class="code-block"><span class="var">all_info</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">read_csv</span>(<span class="str">'../tmp/all_info_notnull.csv'</span>)
+<span class="cm"># 定义3σ原则函数来识别异常值</span>
+<span class="kw">def</span> <span class="fn">out_range</span>(<span class="var">ser1</span>):
+    <span class="var">bool_ind</span> <span class="op">=</span> (<span class="var">ser1</span>.<span class="fn">mean</span>() <span class="op">-</span> <span class="num">3</span> <span class="op">*</span> <span class="var">ser1</span>.<span class="fn">std</span>() <span class="op">></span> <span class="var">ser1</span>) <span class="op">|</span>  (<span class="var">ser1</span>.<span class="fn">mean</span>() <span class="op">+</span> <span class="num">3</span> <span class="op">*</span> <span class="var">ser1</span>.<span class="fn">var</span>() <span class="op"><</span> <span class="var">ser1</span>)
+    <span class="var">index</span> <span class="op">=</span> <span class="var">np</span>.<span class="fn">arange</span>(<span class="var">ser1</span>.<span class="fn">shape</span>[<span class="num">0</span>])[<span class="var">bool_ind</span>]
+    <span class="var">outrange</span> <span class="op">=</span> <span class="var">ser1</span>.<span class="fn">iloc</span>[<span class="var">index</span>]
+    <span class="kw">return</span> <span class="var">outrange</span>
+
+<span class="var">outlier</span> <span class="op">=</span> <span class="fn">out_range</span>(<span class="var">all_info</span>[<span class="str">'年龄/岁'</span>])
+<span class="fn">print</span>(<span class="str">'使用3σ原则判定异常值个数为: '</span>, <span class="var">outlier</span>.<span class="fn">shape</span>[<span class="num">0</span>])
+<span class="fn">print</span>(<span class="str">'异常值的最大值为: '</span>, <span class="var">outlier</span>.<span class="fn">max</span>())
+<span class="fn">print</span>(<span class="str">'异常值的最小值为: '</span>, <span class="var">outlier</span>.<span class="fn">min</span>())</pre>
+      </div>
+    </div>
+
+    <!-- 练习4 -->
+    <div class="card" id="card-exp6-4">
+      <div class="card-header" onclick="toggleCard('exp6-4')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习4、线性插值</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp6-4')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">读懂下列代码后，充分了解其功能后，在程序中实现。</p>
+        <div class="info-box">
+          <strong>知识点：</strong><code>scipy.interpolate.interp1d</code> 可以根据已知的 x, y 数据点，插值计算任意 x 对应的 y 值。<code>kind='linear'</code> 表示线性插值。
+        </div>
+<pre class="code-block"><span class="cm"># 线性插值</span>
+<span class="kw">import</span> <span class="var">numpy</span> <span class="kw">as</span> <span class="var">np</span>
+<span class="kw">from</span> <span class="var">scipy.interpolate</span> <span class="kw">import</span> <span class="fn">interp1d</span>
+<span class="cm"># 创建自变量x</span>
+<span class="var">x</span> <span class="op">=</span> <span class="var">np</span>.<span class="fn">array</span>([<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>, <span class="num">8</span>, <span class="num">9</span>, <span class="num">10</span>])
+<span class="cm"># 创建因变量y1</span>
+<span class="var">y1</span> <span class="op">=</span> <span class="var">np</span>.<span class="fn">array</span>([<span class="num">2</span>, <span class="num">8</span>, <span class="num">18</span>, <span class="num">32</span>, <span class="num">50</span>, <span class="num">128</span>, <span class="num">162</span>, <span class="num">200</span>])
+<span class="cm"># 创建因变量y2</span>
+<span class="var">y2</span> <span class="op">=</span> <span class="var">np</span>.<span class="fn">array</span>([<span class="num">3</span>, <span class="num">5</span>, <span class="num">7</span>, <span class="num">9</span>, <span class="num">11</span>, <span class="num">17</span>, <span class="num">19</span>, <span class="num">21</span>])
+<span class="cm"># 线性插值拟合x、y1</span>
+<span class="var">linear_ins_value1</span> <span class="op">=</span> <span class="fn">interp1d</span>(<span class="var">x</span>, <span class="var">y1</span>, <span class="var">kind</span><span class="op">=</span><span class="str">'linear'</span>)
+<span class="cm"># 线性插值拟合x、y2</span>
+<span class="var">linear_ins_value2</span> <span class="op">=</span> <span class="fn">interp1d</span>(<span class="var">x</span>, <span class="var">y2</span>, <span class="var">kind</span><span class="op">=</span><span class="str">'linear'</span>)
+<span class="fn">print</span>(<span class="str">'当x为6、7时, 使用线性插值, Y1对应的两个值为: '</span>, <span class="var">linear_ins_value1</span>([<span class="num">6</span>, <span class="num">7</span>]))
+<span class="fn">print</span>(<span class="str">'当x为6、7时, 使用线性插值, y2对应的两个值为: '</span>, <span class="var">linear_ins_value2</span>([<span class="num">6</span>, <span class="num">7</span>]))</pre>
+      </div>
+    </div>
+
+    <!-- 练习5 -->
+    <div class="card" id="card-exp6-5">
+      <div class="card-header" onclick="toggleCard('exp6-5')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习5、三种数据标准化方法</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp6-5')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">读懂下列代码后，充分了解其功能后，在程序中实现。</p>
+        <div class="tag">user_pay_info.csv</div>
+        <div class="info-box">
+          <strong>三种标准化对比：</strong>
+          <br><code>离差标准化</code>：(x - min) / (max - min)，结果在 [0,1] 之间
+          <br><code>标准差标准化</code>：(x - mean) / std，均值为0，标准差为1
+          <br><code>小数定标标准化</code>：x / 10^ceil(log10(|x|max))，按数量级归一化
+        </div>
+<pre class="code-block"><span class="kw">import</span> <span class="var">pandas</span> <span class="kw">as</span> <span class="var">pd</span>
+<span class="var">pay</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">read_csv</span>(<span class="str">'../data/user_pay_info.csv'</span>, <span class="var">index_col</span><span class="op">=</span><span class="num">0</span>)
+
+<span class="cm"># 自定义离差标准化函数</span>
+<span class="kw">def</span> <span class="fn">min_max_scale</span>(<span class="var">data</span>):
+    <span class="var">data</span> <span class="op">=</span> (<span class="var">data</span> <span class="op">-</span> <span class="var">data</span>.<span class="fn">min</span>()) <span class="op">/</span> (<span class="var">data</span>.<span class="fn">max</span>() <span class="op">-</span> <span class="var">data</span>.<span class="fn">min</span>())
+    <span class="kw">return</span> <span class="var">data</span>
+
+<span class="cm"># 对用户每月支出信息表的每月支出数据进行离差标准化</span>
+<span class="var">pay_min_max</span> <span class="op">=</span> <span class="fn">min_max_scale</span>(<span class="var">pay</span>[<span class="str">'每月支出/元'</span>])
+<span class="fn">print</span>(<span class="str">'离差标准化之前每月支出数据为: \n'</span>, <span class="var">pay</span>[<span class="str">'每月支出/元'</span>].<span class="fn">head</span>())
+<span class="fn">print</span>(<span class="str">'离差标准化之后每月支出数据为: \n'</span>, <span class="var">pay_min_max</span>.<span class="fn">head</span>())
+
+<span class="cm"># 自定义标准差标准化函数</span>
+<span class="kw">def</span> <span class="fn">standard_scaler</span>(<span class="var">data</span>):
+    <span class="var">data</span> <span class="op">=</span> (<span class="var">data</span> <span class="op">-</span> <span class="var">data</span>.<span class="fn">mean</span>()) <span class="op">/</span> <span class="var">data</span>.<span class="fn">std</span>()
+    <span class="kw">return</span> <span class="var">data</span>
+
+<span class="cm"># 对用户每月支出信息表的每月支出数据进行标准差标准化</span>
+<span class="var">pay_standard</span> <span class="op">=</span> <span class="fn">standard_scaler</span>(<span class="var">pay</span>[<span class="str">'每月支出/元'</span>])
+<span class="fn">print</span>(<span class="str">'标准差标准化之前每月支出数据为: \n'</span>, <span class="var">pay</span>[<span class="str">'每月支出/元'</span>].<span class="fn">head</span>())
+<span class="fn">print</span>(<span class="str">'标准差标准化之后每月支出数据为: \n'</span>, <span class="var">pay_standard</span>.<span class="fn">head</span>())
+
+<span class="cm"># 自定义小数定标标准化函数</span>
+<span class="kw">import</span> <span class="var">numpy</span> <span class="kw">as</span> <span class="var">np</span>
+<span class="kw">def</span> <span class="fn">decimal_scaler</span>(<span class="var">data</span>):
+    <span class="var">data</span> <span class="op">=</span> <span class="var">data</span> <span class="op">/</span> <span class="num">10</span> <span class="op">**</span> <span class="var">np</span>.<span class="fn">ceil</span>(<span class="var">np</span>.<span class="fn">log10</span>(<span class="var">data</span>.<span class="fn">abs</span>().<span class="fn">max</span>()))
+    <span class="kw">return</span> <span class="var">data</span>
+
+<span class="cm"># 对用户每月支出信息表的每月支出数据进行小数定标标准化</span>
+<span class="var">pay_decimal</span> <span class="op">=</span> <span class="fn">decimal_scaler</span>(<span class="var">pay</span>[<span class="str">'每月支出/元'</span>])
+<span class="fn">print</span>(<span class="str">'小数定标标准化之前的每月支出数据为: \n'</span>, <span class="var">pay</span>[<span class="str">'每月支出/元'</span>].<span class="fn">head</span>())
+<span class="fn">print</span>(<span class="str">'小数定标标准化之后的每月支出数据为: \n'</span>, <span class="var">pay_decimal</span>.<span class="fn">head</span>())</pre>
+      </div>
+    </div>
+
+    <!-- 练习6 -->
+    <div class="card" id="card-exp6-6">
+      <div class="card-header" onclick="toggleCard('exp6-6')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>练习6、哑变量处理 + 数据离散化</h3></div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp6-6')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">读懂下列代码后，充分了解其功能后，在程序中实现。</p>
+        <div class="tag">user_all_info.csv</div>
+        <div class="info-box">
+          <strong>三种离散化方法：</strong>
+          <br><code>pd.cut()</code> — 等宽法，按数值范围等分
+          <br><code>自定义等频法</code> — 按分位数切分，每箱个数相同
+          <br><code>K-Means聚类</code> — 用聚类算法自动找分界点
+        </div>
+<pre class="code-block"><span class="kw">import</span> <span class="var">pandas</span> <span class="kw">as</span> <span class="var">pd</span>
+<span class="kw">import</span> <span class="var">numpy</span> <span class="kw">as</span> <span class="var">np</span>
+<span class="var">all_info</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">read_csv</span>(<span class="str">'../data/user_all_info.csv'</span>)
+<span class="var">live_type</span> <span class="op">=</span> <span class="var">all_info</span>.<span class="fn">loc</span>[<span class="num">0</span>: <span class="num">5</span>, <span class="str">'居住类型'</span>]  <span class="cm"># 抽取部分数据做演示</span>
+<span class="fn">print</span>(<span class="str">'哑变量处理前的数据为: \n'</span>, <span class="var">live_type</span>)
+<span class="fn">print</span>(<span class="str">'哑变量处理后的数据为: \n'</span>, <span class="var">pd</span>.<span class="fn">get_dummies</span>(<span class="var">live_type</span>, <span class="var">dtype</span><span class="op">=</span><span class="fn">int</span>))
+
+<span class="var">age_cut</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">cut</span>(<span class="var">all_info</span>[<span class="str">'年龄/岁'</span>], <span class="num">5</span>)
+<span class="fn">print</span>(<span class="str">'离散化后记录的年龄分布为: \n'</span>, <span class="var">age_cut</span>.<span class="fn">value_counts</span>())
+
+<span class="cm"># 自定义等频法离散化函数</span>
+<span class="kw">def</span> <span class="fn">same_rate_cut</span>(<span class="var">data</span>, <span class="var">k</span>):
+    <span class="var">h</span> <span class="op">=</span> <span class="var">data</span>.<span class="fn">quantile</span>(<span class="var">np</span>.<span class="fn">arange</span>(<span class="num">0</span>, <span class="num">1</span> <span class="op">+</span> <span class="num">1.0</span> <span class="op">/</span> <span class="var">k</span>, <span class="num">1.0</span> <span class="op">/</span> <span class="var">k</span>))
+    <span class="var">data</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">cut</span>(<span class="var">data</span>, <span class="var">h</span>)
+    <span class="kw">return</span> <span class="var">data</span>
+
+<span class="cm"># 对用户年龄进行等频法离散化</span>
+<span class="var">age_same_rate</span> <span class="op">=</span> <span class="fn">same_rate_cut</span>(<span class="var">all_info</span>[<span class="str">'年龄/岁'</span>], <span class="num">5</span>).<span class="fn">value_counts</span>()
+<span class="fn">print</span>(<span class="str">'用户年龄数据等频法离散化后分布状况为: '</span>, <span class="str">'\n'</span>, <span class="var">age_same_rate</span>)
+
+<span class="cm"># K-Means聚类法离散化</span>
+<span class="kw">def</span> <span class="fn">kmean_cut</span>(<span class="var">data</span>, <span class="var">k</span>):
+    <span class="kw">from</span> <span class="var">sklearn.cluster</span> <span class="kw">import</span> <span class="fn">KMeans</span>  <span class="cm"># 引入K-Means</span>
+    <span class="cm"># 建立模型</span>
+    <span class="var">kmodel</span> <span class="op">=</span> <span class="fn">KMeans</span>(<span class="var">n_clusters</span><span class="op">=</span><span class="var">k</span>, <span class="var">random_state</span><span class="op">=</span><span class="num">0</span>)
+    <span class="var">kmodel</span>.<span class="fn">fit</span>(<span class="var">data</span>.<span class="fn">values</span>.<span class="fn">reshape</span>((<span class="fn">len</span>(<span class="var">data</span>), <span class="num">1</span>)))  <span class="cm"># 训练模型</span>
+    <span class="cm"># 输出聚类中心并排序</span>
+    <span class="var">c</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">DataFrame</span>(<span class="var">kmodel</span>.<span class="var">cluster_centers_</span>).<span class="fn">sort_values</span>(<span class="num">0</span>)
+    <span class="var">w</span> <span class="op">=</span> <span class="var">c</span>.<span class="fn">rolling</span>(<span class="num">2</span>).<span class="fn">mean</span>().<span class="fn">iloc</span>[<span class="num">1</span>:]  <span class="cm"># 对相邻两端求中点，作为边界点</span>
+    <span class="var">w</span> <span class="op">=</span> [<span class="num">0</span>] <span class="op">+</span> <span class="fn">list</span>(<span class="var">w</span>[<span class="num">0</span>]) <span class="op">+</span> [<span class="var">data</span>.<span class="fn">max</span>()]  <span class="cm"># 把首末边界点加上</span>
+    <span class="var">data</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">cut</span>(<span class="var">data</span>, <span class="var">w</span>)
+    <span class="kw">return</span> <span class="var">data</span>
+
+<span class="cm"># 用户年龄聚类分析法离散化</span>
+<span class="var">all_info</span>.<span class="fn">dropna</span>(<span class="var">inplace</span><span class="op">=</span><span class="var">True</span>)
+<span class="var">age_kmeans</span> <span class="op">=</span> <span class="fn">kmean_cut</span>(<span class="var">all_info</span>[<span class="str">'年龄/岁'</span>], <span class="num">5</span>).<span class="fn">value_counts</span>()
+<span class="fn">print</span>(<span class="str">'用户年龄聚类分析法离散化后各个类别数目分布状况为: '</span>, <span class="str">'\n'</span>, <span class="var">age_kmeans</span>)</pre>
+      </div>
+    </div>
+
+    <!-- 练习7 -->
+    <div class="card" id="card-exp6-7">
+      <div class="card-header" onclick="toggleCard('exp6-7')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area">
+          <h3>练习7、来聘人员信息综合处理（应用题）</h3>
+        </div>
+        <div class="card-check" onclick="event.stopPropagation(); toggleCheck('exp6-7')" title="标记完成"></div>
+      </div>
+      <div class="card-body">
+        <p class="original-text">某公司人事工作人员为了对来聘人员信息进行分析，以聘用适合计算机岗位的人员，调用了计算机岗位来聘人员信息表(hr_job.csv)，数据字段包括应聘人员ID、性别、相关经验、教育水平和工作次数等信息。经观察发现，数据存在缺失值等异常数据，因此需要对数据进行预处理。提示如下：</p>
+        <div class="tag">hr_job.csv</div>
+
+        <div class="sub-title">(1) 读取来聘人员信息数据</div>
+<pre class="code-block"><span class="kw">import</span> <span class="var">pandas</span> <span class="kw">as</span> <span class="var">pd</span>
+
+<span class="var">df</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">read_csv</span>(<span class="str">'hr_job.csv'</span>)
+<span class="fn">print</span>(<span class="var">df</span>.<span class="fn">head</span>())
+<span class="fn">print</span>(<span class="var">df</span>.<span class="fn">info</span>())
+<span class="fn">print</span>(<span class="var">df</span>.<span class="fn">describe</span>())</pre>
+
+        <div class="sub-title">(2) 异常值替换</div>
+<pre class="code-block"><span class="cm"># 数值型异常值替换为对应特征的均值</span>
+<span class="var">num_cols</span> <span class="op">=</span> <span class="var">df</span>.<span class="fn">select_dtypes</span>(<span class="var">include</span><span class="op">=</span>[<span class="str">'number'</span>]).<span class="var">columns</span>
+<span class="kw">for</span> <span class="var">col</span> <span class="kw">in</span> <span class="var">num_cols</span>:
+    <span class="var">mean_val</span> <span class="op">=</span> <span class="var">df</span>[<span class="var">col</span>].<span class="fn">mean</span>()
+    <span class="var">df</span>[<span class="var">col</span>] <span class="op">=</span> <span class="var">df</span>[<span class="var">col</span>].<span class="fn">fillna</span>(<span class="var">mean_val</span>)
+
+<span class="cm"># 性别特征的异常值替换为"未知"</span>
+<span class="var">df</span>[<span class="str">'性别'</span>] <span class="op">=</span> <span class="var">df</span>[<span class="str">'性别'</span>].<span class="fn">fillna</span>(<span class="str">'未知'</span>)
+<span class="fn">print</span>(<span class="var">df</span>[<span class="str">'性别'</span>].<span class="fn">value_counts</span>())</pre>
+
+        <div class="sub-title">(3) 哑变量处理</div>
+<pre class="code-block"><span class="cm"># 对分类数据进行哑变量编码</span>
+<span class="var">cat_cols</span> <span class="op">=</span> <span class="var">df</span>.<span class="fn">select_dtypes</span>(<span class="var">include</span><span class="op">=</span>[<span class="str">'object'</span>]).<span class="var">columns</span>
+<span class="var">df_encoded</span> <span class="op">=</span> <span class="var">pd</span>.<span class="fn">get_dummies</span>(<span class="var">df</span>, <span class="var">columns</span><span class="op">=</span><span class="var">cat_cols</span>)
+<span class="fn">print</span>(<span class="var">df_encoded</span>.<span class="fn">head</span>())</pre>
+
+        <div class="sub-title">(4) 处理重复值</div>
+<pre class="code-block"><span class="cm"># 查看重复行数</span>
+<span class="fn">print</span>(<span class="str">'重复行数:'</span>, <span class="var">df</span>.<span class="fn">duplicated</span>().<span class="fn">sum</span>())
+
+<span class="cm"># 删除重复行</span>
+<span class="var">df</span> <span class="op">=</span> <span class="var">df</span>.<span class="fn">drop_duplicates</span>()
+<span class="fn">print</span>(<span class="str">'处理后:'</span>, <span class="var">df</span>.<span class="fn">shape</span>)</pre>
+
+        <div class="sub-title">(5) 计算分位数</div>
+<pre class="code-block"><span class="cm"># 计算成交金额的统计量</span>
+<span class="var">min_val</span> <span class="op">=</span> <span class="var">df</span>[<span class="str">'成交金额'</span>].<span class="fn">min</span>()
+<span class="var">q33</span> <span class="op">=</span> <span class="var">df</span>[<span class="str">'成交金额'</span>].<span class="fn">quantile</span>(<span class="num">0.33</span>)
+<span class="var">q66</span> <span class="op">=</span> <span class="var">df</span>[<span class="str">'成交金额'</span>].<span class="fn">quantile</span>(<span class="num">0.66</span>)
+<span class="var">max_val</span> <span class="op">=</span> <span class="var">df</span>[<span class="str">'成交金额'</span>].<span class="fn">max</span>()
+
+<span class="fn">print</span>(<span class="str">f'最小值: </span><span class="var">{min_val}</span><span class="str">'</span>)
+<span class="fn">print</span>(<span class="str">f'33%分位数: </span><span class="var">{q33}</span><span class="str">'</span>)
+<span class="fn">print</span>(<span class="str">f'66%分位数: </span><span class="var">{q66}</span><span class="str">'</span>)
+<span class="fn">print</span>(<span class="str">f'最大值: </span><span class="var">{max_val}</span><span class="str">'</span>)</pre>
+
+        <div class="sub-title">(6) 数据离散化</div>
+<pre class="code-block"><span class="cm"># 使用pd.cut进行离散化</span>
+<span class="var">bins</span> <span class="op">=</span> [<span class="var">min_val</span>, <span class="var">q33</span>, <span class="var">q66</span>, <span class="var">max_val</span>]
+<span class="var">labels</span> <span class="op">=</span> [<span class="str">'低'</span>, <span class="str">'中'</span>, <span class="str">'高'</span>]
+<span class="var">df</span>[<span class="str">'金额等级'</span>] <span class="op">=</span> <span class="var">pd</span>.<span class="fn">cut</span>(<span class="var">df</span>[<span class="str">'成交金额'</span>],
+                          <span class="var">bins</span><span class="op">=</span><span class="var">bins</span>,
+                          <span class="var">labels</span><span class="op">=</span><span class="var">labels</span>,
+                          <span class="var">include_lowest</span><span class="op">=</span><span class="var">True</span>)
+<span class="fn">print</span>(<span class="var">df</span>[<span class="str">'金额等级'</span>].<span class="fn">value_counts</span>())</pre>
+
+        <div class="sub-title">(7) 保存数据</div>
+<pre class="code-block"><span class="cm"># 保存为 CSV 文件（请替换为自己的学号和姓名）</span>
+<span class="var">filename</span> <span class="op">=</span> <span class="str">'自己的学号_自己的姓名_第4章处理.csv'</span>
+<span class="var">df</span>.<span class="fn">to_csv</span>(<span class="var">filename</span>, <span class="var">index</span><span class="op">=</span><span class="var">False</span>, <span class="var">encoding</span><span class="op">=</span><span class="str">'utf-8-sig'</span>)
+<span class="fn">print</span>(<span class="str">f'已保存为: </span><span class="var">{filename}</span><span class="str">'</span>)</pre>
+      </div>
+    </div>
+
+    <!-- ===== Reference Section ===== -->
+    <div class="card" id="card-exp6-ref" style="border-left: 4px solid var(--accent);">
+      <div class="card-header" onclick="toggleCard('exp6-ref')">
+        <div class="card-toggle">&#9660;</div>
+        <div class="card-title-area"><h3>附录：常用数据预处理函数速查表</h3></div>
+      </div>
+      <div class="card-body">
+<table class="mini-table">
+  <tr><th>函数</th><th>用途</th><th>示例</th></tr>
+  <tr><td><code>pd.read_csv()</code></td><td>读取CSV文件</td><td><code>pd.read_csv('data.csv')</code></td></tr>
+  <tr><td><code>pd.read_excel()</code></td><td>读取Excel文件</td><td><code>pd.read_excel('data.xlsx')</code></td></tr>
+  <tr><td><code>df.info()</code></td><td>查看数据类型和非空计数</td><td><code>df.info()</code></td></tr>
+  <tr><td><code>df.describe()</code></td><td>描述性统计</td><td><code>df.describe()</code></td></tr>
+  <tr><td><code>df.isnull().sum()</code></td><td>统计缺失值</td><td><code>df.isnull().sum()</code></td></tr>
+  <tr><td><code>df.fillna()</code></td><td>填充缺失值</td><td><code>df.fillna(0)</code></td></tr>
+  <tr><td><code>df.drop_duplicates()</code></td><td>去重</td><td><code>df.drop_duplicates()</code></td></tr>
+  <tr><td><code>pd.get_dummies()</code></td><td>哑变量编码</td><td><code>pd.get_dummies(df['col'])</code></td></tr>
+  <tr><td><code>pd.cut()</code></td><td>等宽分箱</td><td><code>pd.cut(df['col'], bins=5)</code></td></tr>
+  <tr><td><code>pd.qcut()</code></td><td>等频分箱</td><td><code>pd.qcut(df['col'], q=4)</code></td></tr>
+  <tr><td><code>pd.concat()</code></td><td>数据拼接</td><td><code>pd.concat([df1, df2])</code></td></tr>
+  <tr><td><code>pd.merge()</code></td><td>键合并</td><td><code>pd.merge(df1, df2, on='key')</code></td></tr>
+</table>
+      </div>
+    </div>
+  </section>
+
+</div><!-- end .main -->
+
+<!-- ===== RIGHT PANEL ===== -->
+<aside class="right-panel">
+  <h3>(・ω・)ノ 知识速查</h3>
+
+  <div class="tip-group">
+    <h4>面向对象 OOP</h4>
+    <div class="tip-item">
+      <span class="tip-title">定义类</span>
+      <code>class MyClass: def __init__(self):</code>
+      <span class="tip-desc">__init__ 是构造函数，self 代表实例本身</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">继承</span>
+      <code>class Child(Parent):</code>
+      <span class="tip-desc">子类继承父类的属性和方法</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">方法重写</span>
+      <code>子类中定义同名方法</code>
+      <span class="tip-desc">覆盖父类的方法实现自己的逻辑</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">super()</span>
+      <code>super().__init__(args)</code>
+      <span class="tip-desc">调用父类的构造函数，避免重复写代码</span>
+    </div>
+  </div>
+
+  <div class="tip-group">
+    <h4>NumPy 基础</h4>
+    <div class="tip-item">
+      <span class="tip-title">创建数组</span>
+      <code>np.array() / np.zeros() / np.ones()</code>
+      <span class="tip-desc">array 从列表创建，zeros 全零，ones 全一</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">等差数组</span>
+      <code>np.linspace(start, end, n)</code>
+      <span class="tip-desc">生成 n 个等间距的数</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">数组索引</span>
+      <code>arr[0] / arr[1:5] / arr[-1]</code>
+      <span class="tip-desc">正索引从0开始，负索引从末尾开始</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">reshape</span>
+      <code>arr.reshape(4, 4)</code>
+      <span class="tip-desc">改变数组形状，总数必须不变</span>
+    </div>
+  </div>
+
+  <div class="tip-group">
+    <h4>Pandas 基础</h4>
+    <div class="tip-item">
+      <span class="tip-title">创建 Series</span>
+      <code>pd.Series(data, index=...)</code>
+      <span class="tip-desc">一维数据，带索引的数组</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">创建 DataFrame</span>
+      <code>pd.DataFrame(data, columns=...)</code>
+      <span class="tip-desc">二维表格，最常用的数据结构</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">读取文件</span>
+      <code>pd.read_csv() / pd.read_excel()</code>
+      <span class="tip-desc">csv 用 read_csv，xlsx 用 read_excel</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">查看数据</span>
+      <code>df.head() / df.tail() / df.info()</code>
+      <span class="tip-desc">head看前几行，tail看后几行，info看整体</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">增删列</span>
+      <code>df['新列'] = ... / df.drop(columns=[...])</code>
+      <span class="tip-desc">直接赋值就是加列，drop 就是删列</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">条件筛选</span>
+      <code>df[df['col'] > 100]</code>
+      <span class="tip-desc">布尔索引，条件放中括号里</span>
+    </div>
+  </div>
+
+  <div class="tip-group">
+    <h4>Matplotlib 画图</h4>
+    <div class="tip-item">
+      <span class="tip-title">折线图</span>
+      <code>plt.plot(x, y)</code>
+      <span class="tip-desc">最基础的图，适合展示趋势变化</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">散点图</span>
+      <code>plt.scatter(x, y)</code>
+      <span class="tip-desc">看两个变量之间有没有关系</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">柱形图</span>
+      <code>plt.bar(x, height)</code>
+      <span class="tip-desc">比较不同类别的数值大小</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">饼图</span>
+      <code>plt.pie(x, labels=...)</code>
+      <span class="tip-desc">看各部分占总体的比例</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">箱线图</span>
+      <code>plt.boxplot(data)</code>
+      <span class="tip-desc">看数据分布和异常值</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">热力图</span>
+      <code>sns.heatmap(corr)</code>
+      <span class="tip-desc">看多个变量之间的相关性</span>
+    </div>
+  </div>
+
+  <div class="tip-group">
+    <h4>数据合并</h4>
+    <div class="tip-item">
+      <span class="tip-title">concat 拼接</span>
+      <code>pd.concat([df1, df2], axis=0)</code>
+      <span class="tip-desc">axis=0 上下拼，axis=1 左右拼</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">merge 合并</span>
+      <code>pd.merge(df1, df2, on='key')</code>
+      <span class="tip-desc">类似 SQL 的 join，按关键列合并</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">join 连接</span>
+      <code>df1.join(df2)</code>
+      <span class="tip-desc">按索引合并，比 merge 更简洁</span>
+    </div>
+  </div>
+
+  <div class="tip-group">
+    <h4>数据清洗</h4>
+    <div class="tip-item">
+      <span class="tip-title">看缺失值</span>
+      <code>df.isnull().sum()</code>
+      <span class="tip-desc">每列有多少个空值</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">填缺失值</span>
+      <code>df.fillna(均值/中位数)</code>
+      <span class="tip-desc">用均值、中位数或众数填充</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">去重复</span>
+      <code>df.drop_duplicates()</code>
+      <span class="tip-desc">删掉完全一样的行</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">哑变量</span>
+      <code>pd.get_dummies(df['col'])</code>
+      <span class="tip-desc">把分类文字变成 0/1 数字</span>
+    </div>
+  </div>
+
+  <div class="tip-group">
+    <h4>数据变换</h4>
+    <div class="tip-item">
+      <span class="tip-title">等宽分箱</span>
+      <code>pd.cut(df['col'], bins=N)</code>
+      <span class="tip-desc">按数值范围等分</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">等频分箱</span>
+      <code>pd.qcut(df['col'], q=N)</code>
+      <span class="tip-desc">按数量等分，每箱个数一样</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">标准化</span>
+      <code>(x - mean) / std</code>
+      <span class="tip-desc">让数据变成均值0、标准差1</span>
+    </div>
+  </div>
+
+  <div class="tip-group">
+    <h4>常用技巧</h4>
+    <div class="tip-item">
+      <span class="tip-title">子图布局</span>
+      <code>fig, axes = plt.subplots(2,2)</code>
+      <span class="tip-desc">一张画布上画多个小图</span>
+    </div>
+    <div class="tip-item">
+      <span class="tip-title">保存图片</span>
+      <code>plt.savefig('fig.png', dpi=150)</code>
+      <span class="tip-desc">记得在 show() 之前保存</span>
+    </div>
+  </div>
+</aside>
+
+<script>
+// ===== State =====
+const STORAGE_KEY = 'python_exp_progress';
+let progress = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+
+// All exercise IDs
+const exerciseIds = [
+  'exp1-1','exp1-2','exp1-3','exp1-4','exp1-5','exp1-6','exp1-7',
+  'exp2-1','exp2-2','exp2-3','exp2-4','exp2-5','exp2-6',
+  'exp3-1','exp3-2','exp3-3','exp3-4','exp3-5','exp3-6','exp3-7','exp3-8','exp3-9','exp3-10','exp3-11','exp3-12','exp3-13','exp3-14','exp3-15','exp3-16','exp3-17','exp3-18',
+  'exp4-1','exp4-2','exp4-3','exp4-4','exp4-5','exp4-6','exp4-7','exp4-8','exp4-9',
+  'exp5-1','exp5-2','exp5-3','exp5-4','exp5-5',
+  'exp6-1','exp6-2','exp6-3','exp6-4','exp6-5','exp6-6','exp6-7'
+];
+
+// Sidebar nav structure
+const navData = [
+  {
+    title: '第一次实验：面向对象',
+    id: 'exp1',
+    items: [
+      {id:'exp1-1', label:'练习1 图形面积'},
+      {id:'exp1-2', label:'练习2 猜数字'},
+      {id:'exp1-3', label:'练习3 Student类'},
+      {id:'exp1-4', label:'练习4 表达式求值'},
+      {id:'exp1-5', label:'练习5 简易计算器'},
+      {id:'exp1-6', label:'练习6 冒泡排序'},
+      {id:'exp1-7', label:'练习7 员工类'}
+    ]
+  },
+  {
+    title: '第二次实验：NumPy基础',
+    id: 'exp2',
+    items: [
+      {id:'exp2-1', label:'练习1 全零数组'},
+      {id:'exp2-2', label:'练习2 数组索引'},
+      {id:'exp2-3', label:'练习3 二维数组'},
+      {id:'exp2-4', label:'练习4 数组比较'},
+      {id:'exp2-5', label:'练习5 数独矩阵'},
+      {id:'exp2-6', label:'练习6 销售数据'}
+    ]
+  },
+  {
+    title: '第三次实验：Pandas基础',
+    id: 'exp3',
+    items: [
+      {id:'exp3-1', label:'练习1 创建Series'},
+      {id:'exp3-2', label:'练习2 Series增删'},
+      {id:'exp3-3', label:'练习3 创建DataFrame'},
+      {id:'exp3-4', label:'练习4 DataFrame属性'},
+      {id:'exp3-5', label:'练习5 读取CSV'},
+      {id:'exp3-6', label:'练习6 读取Excel'},
+      {id:'exp3-7', label:'练习7 数据合并'},
+      {id:'exp3-8', label:'练习8 数据筛选'},
+      {id:'exp3-9', label:'练习9 按行查看'},
+      {id:'exp3-10', label:'练习10 指定行列'},
+      {id:'exp3-11', label:'练习11 条件筛选'},
+      {id:'exp3-12', label:'练习12 缺失值统计'},
+      {id:'exp3-13', label:'练习13 修改列名'},
+      {id:'exp3-14', label:'练习14 添加新列'},
+      {id:'exp3-15', label:'练习15 删除列'},
+      {id:'exp3-16', label:'练习16 NumPy数组'},
+      {id:'exp3-17', label:'练习17 人口数据'},
+      {id:'exp3-18', label:'练习18 汽车销售'}
+    ]
+  },
+  {
+    title: '第四次实验：可视化基础',
+    id: 'exp4',
+    items: [
+      {id:'exp4-1', label:'练习1 折线图'},
+      {id:'exp4-2', label:'练习2 散点图'},
+      {id:'exp4-3', label:'练习3 代码练习'},
+      {id:'exp4-4', label:'练习4 随机漫步'},
+      {id:'exp4-5', label:'练习5 成绩饼图/箱线图'},
+      {id:'exp4-6', label:'练习6 柱形图分析'},
+      {id:'exp4-7', label:'练习7 代码练习'},
+      {id:'exp4-8', label:'练习8 AQI热力图'},
+      {id:'exp4-9', label:'练习9 房价综合'},
+    ]
+  },
+  {
+    title: '第五次实验：数据预处理一',
+    id: 'exp5',
+    items: [
+      {id:'exp5-1', label:'练习1 concat X轴'},
+      {id:'exp5-2', label:'练习2 concat Y轴'},
+      {id:'exp5-3', label:'练习3 merge/join'},
+      {id:'exp5-4', label:'练习4 重叠合并'},
+      {id:'exp5-5', label:'练习5 中风数据合并'},
+    ]
+  },
+  {
+    title: '第六次实验：数据预处理二',
+    id: 'exp6',
+    items: [
+      {id:'exp6-1', label:'练习1 缺失值处理'},
+      {id:'exp6-2', label:'练习2 重复值处理'},
+      {id:'exp6-3', label:'练习3 异常值识别'},
+      {id:'exp6-4', label:'练习4 线性插值'},
+      {id:'exp6-5', label:'练习5 数据标准化'},
+      {id:'exp6-6', label:'练习6 哑变量+离散化'},
+      {id:'exp6-7', label:'练习7 来聘人员处理'},
+    ]
+  }
+];
+
+// ===== Build Sidebar =====
+function buildSidebar() {
+  const nav = document.getElementById('sidebarNav');
+  nav.innerHTML = '';
+  navData.forEach(group => {
+    const g = document.createElement('div');
+    g.className = 'nav-group open';
+    g.innerHTML = `
+      <div class="nav-group-title" onclick="toggleNavGroup(this)">
+        <span>${group.title}</span>
+        <span class="arrow">&#9654;</span>
+      </div>
+      <div class="nav-items">
+        ${group.items.map(it => `
+          <a class="nav-item" href="#card-${it.id}" onclick="scrollToCard('${it.id}'); closeMobileSidebar();">
+            <span class="mini-check ${progress[it.id] ? 'done' : ''}" id="mini-${it.id}"></span>
+            <span>${it.label}</span>
+          </a>
+        `).join('')}
+      </div>
+    `;
+    nav.appendChild(g);
+  });
+}
+
+function toggleNavGroup(el) {
+  el.parentElement.classList.toggle('open');
+}
+
+// ===== Toggle Card =====
+function toggleCard(id) {
+  const card = document.getElementById('card-' + id);
+  card.classList.toggle('open');
+}
+
+// ===== Toggle Check =====
+function toggleCheck(id) {
+  progress[id] = !progress[id];
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+
+  // Update card check
+  const card = document.getElementById('card-' + id);
+  const check = card.querySelector('.card-check');
+  check.classList.toggle('checked', progress[id]);
+
+  // Update sidebar mini check
+  const mini = document.getElementById('mini-' + id);
+  if (mini) mini.classList.toggle('done', progress[id]);
+
+  updateProgress();
+}
+
+// ===== Progress =====
+function updateProgress() {
+  const total = exerciseIds.length;
+  const done = exerciseIds.filter(id => progress[id]).length;
+  const pct = total > 0 ? (done / total * 100) : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = `完成 ${done} / ${total}`;
+}
+
+// ===== Scroll to Card =====
+function scrollToCard(id) {
+  const card = document.getElementById('card-' + id);
+  if (!card) return;
+  // Open the card
+  if (!card.classList.contains('open')) card.classList.add('open');
+  // Scroll
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+
+// ===== Mobile Sidebar =====
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebarOverlay').classList.toggle('open');
+}
+function closeMobileSidebar() {
+  if (window.innerWidth <= 860) {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebarOverlay').classList.remove('open');
+  }
+}
+
+// ===== Fade-in on Scroll =====
+function handleFadeIn() {
+  document.querySelectorAll('.fade-in').forEach(el => {
+    const rect = el.getBoundingClientRect();
+    if (rect.top < window.innerHeight - 60) {
+      el.classList.add('visible');
+    }
+  });
+}
+
+// ===== Init =====
+buildSidebar();
+updateProgress();
+
+// Restore card open states
+exerciseIds.forEach(id => {
+  const card = document.getElementById('card-' + id);
+  const check = card.querySelector('.card-check');
+  if (progress[id]) check.classList.add('checked');
+});
+
+// Scroll listener for fade-in
+window.addEventListener('scroll', handleFadeIn);
+window.addEventListener('load', handleFadeIn);
+handleFadeIn();
+</script>
+</body>
+</html>
