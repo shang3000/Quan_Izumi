@@ -1,12 +1,39 @@
-from pyspark import SparkConf, SparkContext
-import os
+import math
 
-os.environ['PYSPARK_PYTHON'] = "C:/Users/16257/AppData/Local/Programs/Python/Python310/python.exe"
-conf = SparkConf().setMaster("local[*]").setAppName("test_spark")
-sc = SparkContext(conf=conf)
 
-# 准备一个RDD
-rdd = sc.parallelize([('男', 99), ('男', 88), ('女', 99), ('女', 66)])
+class Shape:
+    def __init__(self, name):
+        self.name = name
 
-rdd2 = rdd.reduceByKey(lambda a, b: a + b)
-print(rdd2.collect())
+    def calculate_area(self):
+        return 0
+
+
+class Rectangle(Shape):
+    def __init__(self, length, width):
+        super().__init__('矩形')
+        self.length = length
+        self.width = width
+
+    def calculate_area(self):
+        return self.length * self.width
+
+
+class Circle(Shape):
+    def __init__(self, radius):
+        super().__init__('圆形')
+        self.radius = radius
+
+    def calculate_area(self):
+        return math.pi * self.radius ** 2
+
+
+choice = input('请输入图形类型(矩形/圆形): ')
+if choice == '矩形':
+    length = float(input('长: '))
+    width = float(input('宽: '))
+    shape = Rectangle(length, width)
+else:
+    r = float(input('半径: '))
+    shape = Circle(r)
+print(f'面积: {shape.calculate_area()}')
