@@ -119,9 +119,7 @@ if __name__ == '__main__':
     # ============================================================
     # 方式一：直接粘贴视频 URL（从开发者工具 Network 面板获取）
     # ============================================================
-    video_url = (
-        'https://ai-studio-resource.cn-zhangjiakou.oss.aliyuncs.com/d/qwen/58c1c97f23d3741be390415339c4c7d6/1777359438548-e20bc49baa3f4fa1b3976371cf844230.mp4?Expires=1783344356&OSSAccessKeyId=LTAI5tB1ULAmj55yDBf6XJ9T&Signature=kVRErUIfANYpL7vDflttlQQqukA%3D'
-    )
+    video_url = (input('请输入url:'))
 
     download_video(video_url)
 

@@ -494,6 +494,67 @@
     opacity: 1;
     transform: translateY(0);
   }
+
+  /* ===== Code Line Hover Comment ===== */
+  .code-line {
+    position: relative;
+    display: block;
+    white-space: pre;
+    padding: 0 18px;
+    margin: 0 -18px;
+    transition: background 0.15s;
+    cursor: default;
+  }
+  .code-line:hover {
+    background: rgba(99, 179, 237, 0.12);
+  }
+  .code-line .line-comment {
+    display: inline-block;
+    position: relative;
+    margin-left: 24px;
+    background: rgba(45, 55, 72, 0.92);
+    color: #a0aec0;
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 6px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    vertical-align: middle;
+    border: 1px solid rgba(255,255,255,0.08);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    letter-spacing: 0.3px;
+  }
+  .code-line .line-comment::before {
+    content: '';
+    position: absolute;
+    left: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 5px solid transparent;
+    border-right-color: rgba(45, 55, 72, 0.92);
+  }
+  .code-line:hover .line-comment {
+    opacity: 1;
+  }
+  .line-comment .comment-icon {
+    margin-right: 5px;
+    font-size: 11px;
+  }
+
+  /* Override for code-block pre to allow line hover */
+  .code-block pre, pre.code-block {
+    padding: 0;
+  }
+  .code-block pre .code-line:first-child,
+  pre.code-block .code-line:first-child {
+    padding-top: 16px;
+  }
+  .code-block pre .code-line:last-child,
+  pre.code-block .code-line:last-child {
+    padding-bottom: 16px;
+  }
 </style>
 </head>
 <body>
@@ -2607,6 +2668,208 @@ exerciseIds.forEach(id => {
 window.addEventListener('scroll', handleFadeIn);
 window.addEventListener('load', handleFadeIn);
 handleFadeIn();
+
+// ===== Code Line Hover Comments =====
+function initCodeLineComments() {
+  // 注释规则：正则匹配 → 中文注释
+  const commentRules = [
+    // Python import
+    { pattern: /^\s*import\s+(\w+)/, comment: '导入 $1 模块' },
+    { pattern: /^\s*from\s+[\w.]+\s+import\s+(\w+)/, comment: '从模块导入 $1' },
+    { pattern: /^\s*from\s+(\w[\w.]*)/, comment: '从 $1 导入' },
+
+    // 类定义
+    { pattern: /^\s*class\s+(\w+)\s*\(/, comment: '定义 $1 类（继承）' },
+    { pattern: /^\s*class\s+(\w+)\s*:/, comment: '定义 $1 类' },
+
+    // 函数/方法定义
+    { pattern: /^\s*def\s+__init__\s*\(/, comment: '构造函数：初始化实例属性' },
+    { pattern: /^\s*def\s+(\w+)\s*\(/, comment: '定义 $1 方法' },
+
+    // super()
+    { pattern: /super\(\)/, comment: '调用父类方法' },
+
+    // print
+    { pattern: /^\s*print\s*\(/, comment: '输出到控制台' },
+
+    // input
+    { pattern: /input\s*\(/, comment: '获取用户输入' },
+
+    // if/elif/else
+    { pattern: /^\s*if\s+/, comment: '条件判断' },
+    { pattern: /^\s*elif\s+/, comment: '否则如果' },
+    { pattern: /^\s*else\s*:/, comment: '否则（以上条件都不满足时）' },
+
+    // 循环
+    { pattern: /^\s*for\s+\w+\s+in\s+range\s*\(/, comment: 'for循环：遍历范围' },
+    { pattern: /^\s*for\s+\w+\s+in\s+/, comment: 'for循环：遍历元素' },
+    { pattern: /^\s*while\s+/, comment: 'while循环：条件为真时重复' },
+    { pattern: /^\s*while\s+True/, comment: '无限循环（需手动break退出）' },
+
+    // break/continue/return
+    { pattern: /^\s*break\s*$/, comment: '跳出循环' },
+    { pattern: /^\s*continue\s*$/, comment: '跳过本次循环，进入下一次' },
+    { pattern: /^\s*return\s+/, comment: '返回结果并结束函数' },
+
+    // NumPy
+    { pattern: /np\.zeros\s*\(/, comment: '创建全零数组' },
+    { pattern: /np\.ones\s*\(/, comment: '创建全一数组' },
+    { pattern: /np\.linspace\s*\(/, comment: '生成等差数列' },
+    { pattern: /np\.array\s*\(/, comment: '从列表创建NumPy数组' },
+    { pattern: /np\.random\.seed\s*\(/, comment: '设置随机种子（保证结果可复现）' },
+    { pattern: /np\.random\.rand\s*\(/, comment: '生成[0,1)的均匀随机数' },
+    { pattern: /np\.random\.randn\s*\(/, comment: '生成标准正态分布随机数' },
+    { pattern: /\.cumsum\s*\(/, comment: '累积求和' },
+    { pattern: /\.reshape\s*\(/, comment: '改变数组形状' },
+    { pattern: /np\.where\s*\(/, comment: '条件筛选，返回满足条件的索引' },
+
+    // Pandas
+    { pattern: /pd\.read_csv\s*\(/, comment: '读取CSV文件' },
+    { pattern: /pd\.read_excel\s*\(/, comment: '读取Excel文件' },
+    { pattern: /pd\.Series\s*\(/, comment: '创建Series（一维带索引数组）' },
+    { pattern: /pd\.DataFrame\s*\(/, comment: '创建DataFrame（二维表格）' },
+    { pattern: /pd\.concat\s*\(/, comment: '拼接多个DataFrame' },
+    { pattern: /pd\.merge\s*\(/, comment: '按键合并两个DataFrame' },
+    { pattern: /pd\.cut\s*\(/, comment: '等宽分箱（离散化）' },
+    { pattern: /pd\.to_datetime\s*\(/, comment: '转换为日期时间类型' },
+    { pattern: /pd\.get_dummies\s*\(/, comment: '哑变量编码（分类→0/1）' },
+
+    // DataFrame 操作
+    { pattern: /\.head\s*\(/, comment: '查看前N行' },
+    { pattern: /\.tail\s*\(/, comment: '查看后N行' },
+    { pattern: /\.shape\s*$/, comment: '查看数据维度（行,列）' },
+    { pattern: /\.columns\.tolist\s*\(/, comment: '获取列名列表' },
+    { pattern: /\.dtypes\s*$/, comment: '查看各列数据类型' },
+    { pattern: /\.describe\s*\(/, comment: '描述性统计（均值/标准差/分位数等）' },
+    { pattern: /\.info\s*\(/, comment: '查看数据概览（类型、非空数）' },
+    { pattern: /\.mean\s*\(/, comment: '计算均值' },
+    { pattern: /\.std\s*\(/, comment: '计算标准差' },
+    { pattern: /\.min\s*\(/, comment: '取最小值' },
+    { pattern: /\.max\s*\(/, comment: '取最大值' },
+    { pattern: /\.sum\s*\(/, comment: '求和' },
+    { pattern: /\.value_counts\s*\(/, comment: '统计各值出现次数' },
+    { pattern: /\.isnull\s*\(/, comment: '检测缺失值' },
+    { pattern: /\.notnull\s*\(/, comment: '检测非缺失值' },
+    { pattern: /\.dropna\s*\(/, comment: '删除含缺失值的行' },
+    { pattern: /\.fillna\s*\(/, comment: '填充缺失值' },
+    { pattern: /\.drop_duplicates\s*\(/, comment: '删除重复行' },
+    { pattern: /\.groupby\s*\(/, comment: '分组聚合' },
+    { pattern: /\.iloc\s*\[/, comment: '按整数位置索引' },
+    { pattern: /\.loc\s*\[/, comment: '按标签索引' },
+    { pattern: /\.drop\s*\(/, comment: '删除指定行/列' },
+    { pattern: /\.append\s*\(/, comment: '拼接（追加行）' },
+    { pattern: /\.set_index\s*\(/, comment: '设置某列为索引' },
+    { pattern: /\.join\s*\(/, comment: '按索引合并' },
+    { pattern: /\.to_csv\s*\(/, comment: '保存为CSV文件' },
+    { pattern: /\.to_excel\s*\(/, comment: '保存为Excel文件' },
+    { pattern: /\.sort_values\s*\(/, comment: '按值排序' },
+    { pattern: /\.quantile\s*\(/, comment: '计算分位数' },
+    { pattern: /\.abs\s*\(/, comment: '取绝对值' },
+    { pattern: /\.ceil\s*\(/, comment: '向上取整' },
+    { pattern: /\.plot\s*\(/, comment: '绑制图表' },
+    { pattern: /\.boxplot\s*\(/, comment: '绑制箱线图' },
+    { pattern: /\.rolling\s*\(/, comment: '滚动窗口计算' },
+
+    // Matplotlib
+    { pattern: /plt\.figure\s*\(/, comment: '创建画布' },
+    { pattern: /plt\.plot\s*\(/, comment: '绑制折线图' },
+    { pattern: /plt\.scatter\s*\(/, comment: '绑制散点图' },
+    { pattern: /plt\.bar\s*\(/, comment: '绑制柱形图' },
+    { pattern: /plt\.pie\s*\(/, comment: '绑制饼图' },
+    { pattern: /plt\.hist\s*\(/, comment: '绑制直方图' },
+    { pattern: /plt\.title\s*\(/, comment: '设置图表标题' },
+    { pattern: /plt\.xlabel\s*\(/, comment: '设置X轴标签' },
+    { pattern: /plt\.ylabel\s*\(/, comment: '设置Y轴标签' },
+    { pattern: /plt\.show\s*\(/, comment: '显示图表' },
+    { pattern: /plt\.savefig\s*\(/, comment: '保存图表为文件' },
+    { pattern: /plt\.grid\s*\(/, comment: '显示网格线' },
+    { pattern: /plt\.subplots\s*\(/, comment: '创建子图布局' },
+    { pattern: /plt\.tight_layout\s*\(/, comment: '自动调整子图间距' },
+    { pattern: /plt\.colorbar\s*\(/, comment: '添加颜色条' },
+    { pattern: /plt\.rcParams/, comment: '设置全局图表参数' },
+
+    // Seaborn
+    { pattern: /sns\.heatmap\s*\(/, comment: '绑制热力图' },
+
+    // scipy
+    { pattern: /interp1d\s*\(/, comment: '创建插值函数' },
+
+    // sklearn
+    { pattern: /KMeans\s*\(/, comment: '创建K-Means聚类模型' },
+    { pattern: /\.fit\s*\(/, comment: '训练模型' },
+
+    // 变量赋值
+    { pattern: /^\s*(\w+)\s*=\s*(?!.*\()/, comment: '赋值给变量 $1' },
+
+    // 注释行
+    { pattern: /^\s*#/, comment: '这是一行注释' },
+
+    // 定义函数（自定义）
+    { pattern: /^\s*def\s+out_range/, comment: '定义3σ异常值检测函数' },
+    { pattern: /^\s*def\s+min_max_scale/, comment: '定义离差标准化函数' },
+    { pattern: /^\s*def\s+standard_scaler/, comment: '定义标准差标准化函数' },
+    { pattern: /^\s*def\s+decimal_scaler/, comment: '定义小数定标标准化函数' },
+    { pattern: /^\s*def\s+same_rate_cut/, comment: '定义等频法离散化函数' },
+    { pattern: /^\s*def\s+kmean_cut/, comment: '定义K-Means聚类离散化函数' },
+  ];
+
+  function getComment(lineText) {
+    const text = lineText.trim();
+    if (!text) return null;
+    for (const rule of commentRules) {
+      const match = text.match(rule.pattern);
+      if (match) {
+        let comment = rule.comment;
+        // 替换捕获组
+        if (match[1]) {
+          comment = comment.replace('$1', match[1]);
+        }
+        return comment;
+      }
+    }
+    return null;
+  }
+
+  // 处理所有代码块
+  document.querySelectorAll('pre').forEach(pre => {
+    // 跳过已经被处理过的
+    if (pre.dataset.processed) return;
+    pre.dataset.processed = 'true';
+
+    // 获取纯文本内容（保留HTML结构）
+    const html = pre.innerHTML;
+    // 按换行符分割，保留HTML标签
+    const lines = html.split('\n');
+
+    const fragment = document.createDocumentFragment();
+
+    lines.forEach(line => {
+      const div = document.createElement('div');
+      div.className = 'code-line';
+      div.innerHTML = line || '&nbsp;';
+
+      // 获取纯文本用于匹配规则
+      const textContent = div.textContent;
+      const comment = getComment(textContent);
+
+      if (comment) {
+        const commentEl = document.createElement('span');
+        commentEl.className = 'line-comment';
+        commentEl.innerHTML = '<span class="comment-icon">💬</span>' + comment;
+        div.appendChild(commentEl);
+      }
+
+      fragment.appendChild(div);
+    });
+
+    // 清空原内容并添加新结构
+    pre.textContent = '';
+    pre.appendChild(fragment);
+  });
+}
+
+// 初始化代码行注释
+initCodeLineComments();
 </script>
 </body>
 </html>
