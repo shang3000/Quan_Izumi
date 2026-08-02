@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>习近平新时代中国特色社会主义思想概论 - 刷题题库</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Microsoft YaHei','PingFang SC',sans-serif;background:linear-gradient(135deg,#e8eaf6 0%,#e0e7ff 50%,#ede7f6 100%);min-height:100vh;color:#333}
+.app{display:flex;min-height:100vh}
+.sidebar{width:220px;background:rgba(255,255,255,0.85);backdrop-filter:blur(10px);border-right:1px solid rgba(100,100,200,0.15);padding:20px 0;position:fixed;top:0;left:0;bottom:0;overflow-y:auto;z-index:10}
+.sidebar h2{font-size:15px;color:#4a5568;padding:0 16px 12px;border-bottom:1px solid rgba(100,100,200,0.15);margin-bottom:8px}
+.sidebar .nav-item{padding:10px 20px;cursor:pointer;font-size:14px;color:#555;transition:all .2s;border-left:3px solid transparent}
+.sidebar .nav-item:hover{background:rgba(100,100,200,0.08);color:#5c6bc0}
+.sidebar .nav-item.active{background:rgba(92,107,192,0.12);color:#5c6bc0;border-left-color:#5c6bc0;font-weight:600}
+.sidebar .nav-item .count{font-size:12px;color:#999;margin-left:4px}
+.main{margin-left:220px;flex:1;padding:20px 30px;max-width:900px}
+.stats-bar{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.stat-card{background:rgba(255,255,255,0.9);border-radius:10px;padding:14px 20px;flex:1;min-width:100px;text-align:center;box-shadow:0 2px 8px rgba(100,100,200,0.1)}
+.stat-card .num{font-size:22px;font-weight:700;color:#5c6bc0}
+.stat-card .label{font-size:12px;color:#888;margin-top:4px}
+.filter-bar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.filter-btn{padding:7px 18px;border:1px solid rgba(92,107,192,0.3);border-radius:20px;background:rgba(255,255,255,0.8);cursor:pointer;font-size:13px;color:#666;transition:all .2s}
+.filter-btn:hover{border-color:#5c6bc0;color:#5c6bc0}
+.filter-btn.active{background:#5c6bc0;color:#fff;border-color:#5c6bc0}
+.progress-wrap{margin-bottom:18px;background:rgba(255,255,255,0.8);border-radius:10px;padding:12px 18px;box-shadow:0 2px 8px rgba(100,100,200,0.08)}
+.progress-wrap .info{display:flex;justify-content:space-between;font-size:13px;color:#666;margin-bottom:6px}
+.progress-bar{height:8px;background:#e0e0e0;border-radius:4px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,#7c4dff,#5c6bc0);border-radius:4px;transition:width .3s}
+.q-card{background:rgba(255,255,255,0.92);border-radius:12px;padding:22px 26px;margin-bottom:16px;box-shadow:0 2px 12px rgba(100,100,200,0.08);border-left:4px solid #5c6bc0}
+.q-card.correct{border-left-color:#4caf50}
+.q-card.wrong{border-left-color:#f44336}
+.q-card .q-header{display:flex;align-items:center;margin-bottom:12px}
+.q-card .q-num{font-size:13px;color:#fff;background:#5c6bc0;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;margin-right:10px;flex-shrink:0}
+.q-card .q-type{font-size:12px;padding:3px 10px;border-radius:10px;margin-right:10px;flex-shrink:0}
+.q-card .q-type.single{background:#e8eaf6;color:#5c6bc0}
+.q-card .q-type.multiple{background:#fff3e0;color:#e67e22}
+.q-card .q-type.fill{background:#e8f5e9;color:#4caf50}
+.q-card .q-text{font-size:15px;line-height:1.7;flex:1}
+.options{margin-top:10px;padding-left:38px}
+.option-item{display:flex;align-items:flex-start;padding:8px 12px;margin-bottom:6px;border-radius:8px;cursor:pointer;transition:background .15s;font-size:14px;line-height:1.6}
+.option-item:hover{background:rgba(92,107,192,0.06)}
+.option-item input{margin-right:10px;margin-top:3px;accent-color:#5c6bc0}
+.fill-input{margin-top:10px;padding-left:38px}
+.fill-input input{border:1px solid #ccc;border-radius:6px;padding:8px 14px;font-size:14px;width:280px;outline:none;transition:border .2s}
+.fill-input input:focus{border-color:#5c6bc0}
+.fill-input input.correct{border-color:#4caf50;background:#e8f5e9}
+.fill-input input.wrong{border-color:#f44336;background:#ffebee}
+.submit-row{margin-top:12px;padding-left:38px}
+.submit-btn{padding:9px 28px;background:linear-gradient(135deg,#7c4dff,#5c6bc0);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;transition:opacity .2s}
+.submit-btn:hover{opacity:.88}
+.submit-btn:disabled{opacity:.5;cursor:not-allowed}
+.explanation{margin-top:14px;padding:14px 18px;background:#f5f5ff;border-radius:8px;font-size:13px;color:#555;line-height:1.7;display:none;border:1px solid rgba(92,107,192,0.15)}
+.explanation.show{display:block}
+.explanation .tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600;margin-right:8px}
+.explanation .tag.correct-tag{background:#e8f5e9;color:#4caf50}
+.explanation .tag.wrong-tag{background:#ffebee;color:#f44336}
+.action-bar{margin-top:12px;padding-left:38px;display:flex;gap:10px}
+.action-btn{padding:7px 18px;border-radius:6px;font-size:13px;cursor:pointer;border:1px solid #ddd;background:#fff;transition:all .2s}
+.action-btn:hover{border-color:#5c6bc0;color:#5c6bc0}
+.action-btn.wrong-book{border-color:#f44336;color:#f44336}
+.action-btn.restart{border-color:#ff9800;color:#ff9800}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;justify-content:center;align-items:center}
+.modal-overlay.show{display:flex}
+.modal{background:#fff;border-radius:14px;padding:28px 32px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.2)}
+.modal h3{font-size:18px;margin-bottom:16px;color:#5c6bc0}
+.modal .close-btn{float:right;background:none;border:none;font-size:22px;cursor:pointer;color:#999}
+.modal .close-btn:hover{color:#333}
+.empty-tip{text-align:center;padding:60px 0;color:#aaa;font-size:15px}
+.page-bottom{height:40px}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="sidebar" id="sidebar">
+<h2>章节导航</h2>
+<div id="navList"></div>
+</div>
+<div class="main">
+<div class="stats-bar">
+<div class="stat-card"><div class="num" id="statTotal">0</div><div class="label">总题数</div></div>
+<div class="stat-card"><div class="num" id="statAnswered">0</div><div class="label">已答</div></div>
+<div class="stat-card"><div class="num" id="statCorrect">0</div><div class="label">正确</div></div>
+<div class="stat-card"><div class="num" id="statRate">0%</div><div class="label">正确率</div></div>
+<div class="stat-card"><div class="num" id="statWrong">0</div><div class="label">错题</div></div>
+</div>
+<div class="filter-bar" id="filterBar">
+<button class="filter-btn active" data-type="all">全部</button>
+<button class="filter-btn" data-type="single">单选题</button>
+<button class="filter-btn" data-type="multiple">多选题</button>
+<button class="filter-btn" data-type="fill">填空题</button>
+<button class="action-btn wrong-book" onclick="showWrongBook()">错题本</button>
+<button class="action-btn restart" onclick="doRestart()">重新开始</button>
+</div>
+<div class="progress-wrap">
+<div class="info"><span id="progressText">进度: 0/0</span><span id="progressPercent">0%</span></div>
+<div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+</div>
+<div id="questionArea"></div>
+<div class="page-bottom"></div>
+</div>
+</div>
+
+<div class="modal-overlay" id="wrongModal">
+<div class="modal">
+<button class="close-btn" onclick="closeModal()">&times;</button>
+<h3>错题本</h3>
+<div id="wrongList"></div>
+</div>
+</div>
+
+<script>
+const chapters=['导论','第一章','第二章','第三章','第四章','第五章','第六章','第七章','第八章','第九章','第十章','第十一章','第十二章','第十三章','第十四章','第十五章','第十六章','第十七章'];
+
+const questions=[
+{id:1,chapter:0,type:'single',question:'"两个结合"是我们取得成功的（    ）。',options:['重要法宝','最大法宝','根本保证','关键所在'],answer:[1],explanation:'"两个结合"是我们取得成功的最大法宝。P4'},
+{id:2,chapter:0,type:'single',question:'党的十九大把习近平新时代中国特色社会主义思想确立为党必须长期坚持的指导思想并写入党章，时间是（    ）。',options:['2016年10月','2017年10月','2018年3月','2021年11月'],answer:[1],explanation:'2017年10月，党的十九大确立为指导思想并写入党章。P9'},
+{id:3,chapter:0,type:'single',question:'"十个明确"是习近平新时代中国特色社会主义思想的（    ）。',options:['基本方略','主体内容','世界观和方法论','实践总结'],answer:[1],explanation:'"十个明确"是主体内容，构成四梁八柱，发挥统摄作用。P7'},
+{id:4,chapter:0,type:'single',question:'"十四个坚持"构成了新时代坚持和发展中国特色社会主义事业的（    ）。',options:['根本保证','指导思想','基本方略','行动指南'],answer:[2],explanation:'"十四个坚持"构成了基本方略。P7'},
+{id:5,chapter:0,type:'single',question:'"两个确立"是党在新时代取得的（    ）。',options:['重要经验','理论创新','实践成果','重大政治成果'],answer:[3],explanation:'"两个确立"是党在新时代取得的重大政治成果，对推进中华民族伟大复兴历史进程具有决定性意义。P10'},
+{id:6,chapter:0,type:'multiple',question:'习近平新时代中国特色社会主义思想创立的时代背景包括（    ）。',options:['世界百年未有之大变局加速演进','中华民族伟大复兴进入关键时期','中国式现代化全面推进拓展','科学社会主义在21世纪的中国焕发新的蓬勃生机','中国共产党自我革命开辟新的境界'],answer:[0,1,2,3,4],explanation:'P1-3'},
+{id:7,chapter:0,type:'multiple',question:'"六个必须坚持"包括（    ）。',options:['必须坚持人民至上','必须坚持自信自立','必须坚持守正创新','必须坚持问题导向','必须坚持系统观念','必须坚持胸怀天下'],answer:[0,1,2,3,4,5],explanation:'P8'},
+{id:8,chapter:0,type:'multiple',question:'习近平新时代中国特色社会主义思想是（    ）。',options:['马克思主义基本原理同中国具体实际相结合的重大成果','马克思主义基本原理同中华优秀传统文化相结合的重大成果','当代中国马克思主义','二十一世纪马克思主义'],answer:[0,1,2,3],explanation:'P4, P9'},
+{id:9,chapter:0,type:'multiple',question:'"两个确立"的意义在于（    ）。',options:['是党在新时代取得的重大政治成果','对新时代党和国家事业发展具有决定性意义','对推进中华民族伟大复兴历史进程具有决定性意义','是党和人民应对一切不确定性的最大确定性'],answer:[0,1,2,3],explanation:'P10-11'},
+{id:10,chapter:0,type:'multiple',question:'习近平新时代中国特色社会主义思想回答的重大时代课题包括（    ）。',options:['坚持和发展什么样的中国特色社会主义','怎样坚持和发展中国特色社会主义','建设什么样的社会主义现代化强国','怎样建设社会主义现代化强国'],answer:[0,1,2,3],explanation:'P6'},
+{id:11,chapter:0,type:'fill',question:'习近平新时代中国特色社会主义思想是"______"的重大成果。',answer:'两个结合',explanation:'P4'},
+{id:12,chapter:0,type:'fill',question:'"十个明确"构成了这一思想体系的______，发挥着统摄作用。',answer:'四梁八柱',explanation:'P7'},
+{id:13,chapter:0,type:'fill',question:'"十三个方面成就"对新时代伟大实践进行了______，全景展示了习近平新时代中国特色社会主义思想的理论与实践成果。',answer:'科学总结',explanation:'P8'},
+{id:14,chapter:0,type:'fill',question:'习近平新时代中国特色社会主义思想是______文化和中国精神的时代精华。',answer:'中华',explanation:'P9'},
+{id:15,chapter:0,type:'fill',question:'新时代新征程上必须深刻领悟"两个确立"的决定性意义，增强"______"、坚定"四个自信"、做到"两个维护"。',answer:'四个意识',explanation:'P11'},
+{id:16,chapter:1,type:'single',question:'道路问题是关系党的事业兴衰成败（    ）的问题。',options:['最重要','第一位','最根本','最关键'],answer:[1],explanation:'P15'},
+{id:17,chapter:1,type:'single',question:'中国特色社会主义是科学社会主义理论逻辑和中国社会发展历史逻辑的（    ）。',options:['有机统一','辩证统一','历史统一','逻辑统一'],answer:[1],explanation:'P18'},
+{id:18,chapter:1,type:'single',question:'我们说要坚定道路自信、理论自信、制度自信，说到底是要坚定（    ）。',options:['道路自信','理论自信','制度自信','文化自信'],answer:[3],explanation:'P22'},
+{id:19,chapter:1,type:'single',question:'全面建设社会主义现代化国家是（    ），在"四个全面"中居于引领地位。',options:['战术目标','基本方略','战略目标','根本保证'],answer:[2],explanation:'P31'},
+{id:20,chapter:1,type:'single',question:'我国社会主要矛盾的变化，是我们党作出中国特色社会主义进入新时代重大判断的（    ）。',options:['根本依据','基本依据','重要前提','基本条件'],answer:[1],explanation:'P24'},
+{id:21,chapter:1,type:'single',question:'党的基本理论是坚持和发展中国特色社会主义的（    ）。',options:['根本保证','重要基础','行动指南','基本遵循'],answer:[2],explanation:'P30'},
+{id:22,chapter:1,type:'multiple',question:'改革开放以来我们取得一切成绩和进步的根本原因，归结起来就是（    ）。',options:['开辟了中国特色社会主义道路','形成了中国特色社会主义理论体系','确立了中国特色社会主义制度','发展了中国特色社会主义文化'],answer:[0,1,2,3],explanation:'P20'},
+{id:23,chapter:1,type:'multiple',question:'道路、理论体系、制度、文化四者的关系是（    ）。',options:['道路是实现途径','理论体系是行动指南','制度是根本保障','文化是精神力量'],answer:[0,1,2,3],explanation:'P20'},
+{id:24,chapter:1,type:'multiple',question:'中国特色社会主义进入新时代的三个"意味着"包括（    ）。',options:['意味着中华民族迎来了从站起来、富起来到强起来的伟大飞跃','意味着科学社会主义在21世纪的中国焕发出强大生机活力','意味着中国特色社会主义道路、理论、制度、文化不断发展','意味着我国社会主要矛盾发生了变化'],answer:[0,1,2],explanation:'P23'},
+{id:25,chapter:1,type:'multiple',question:'新时代伟大变革在（    ）上具有里程碑意义。',options:['党史','新中国史','改革开放史','社会主义发展史','中华民族发展史'],answer:[0,1,2,3,4],explanation:'P28'},
+{id:26,chapter:1,type:'multiple',question:'中国特色社会主义进入新时代的反映包括（    ）。',options:['我国社会主要矛盾发生新变化','党的主要任务发生新变化','中国和世界关系发生新变化','我国基本国情发生根本变化'],answer:[0,1,2],explanation:'P23-24'},
+{id:27,chapter:1,type:'multiple',question:'新征程上，协调推进"四个全面"战略布局必须（    ）。',options:['紧紧扭住全面建设社会主义现代化国家这个战略目标不动摇','紧紧扭住全面深化改革不放松','紧紧扭住全面依法治国不放松','紧紧扭住全面从严治党不放松'],answer:[0,1,2,3],explanation:'P31-32'},
+{id:28,chapter:1,type:'fill',question:'中国特色社会主义进入新时代，是我国发展新的______。',answer:'历史方位',explanation:'P14'},
+{id:29,chapter:1,type:'fill',question:'中国特色社会主义是______和人民的选择。',answer:'历史',explanation:'P15'},
+{id:30,chapter:1,type:'fill',question:'我们既要看到我国社会主要矛盾发生的变化，也要看到我国仍处于并将长期处于社会主义______的基本国情没有变。',answer:'初级阶段',explanation:'P26'},
+{id:31,chapter:1,type:'fill',question:'中国特色社会主义写出了科学社会主义的"______"。',answer:'新版本',explanation:'P19'},
+{id:32,chapter:1,type:'fill',question:'"五位一体"总体布局和协调推进"______"战略布局。',answer:'四个全面',explanation:'P29-32'},
+{id:33,chapter:1,type:'fill',question:'全面深化改革、全面依法治国、全面从严治党是三大______，为全面建设社会主义现代化国家提供重要保障。',answer:'战略举措',explanation:'P31'},
+{id:34,chapter:2,type:'single',question:'新时代新征程中国共产党的中心任务，就是以（    ）全面推进中华民族伟大复兴。',options:['改革开放','中国式现代化','高质量发展','共同富裕'],answer:[1],explanation:'P35'},
+{id:35,chapter:2,type:'single',question:'中国式现代化是强国建设、民族复兴的（    ）。',options:['重要途径','唯一正确道路','必然选择','根本保证'],answer:[1],explanation:'P41'},
+{id:36,chapter:2,type:'single',question:'实现中华民族伟大复兴的中国梦，本质是（    ）。',options:['经济发展、政治民主、文化繁荣','国家统一、民族团结、社会稳定','国家富强、民族振兴、人民幸福','科技进步、教育发展、民生改善'],answer:[2],explanation:'P37'},
+{id:37,chapter:2,type:'single',question:'团结奋斗是中国共产党和中国人民最显著的（    ）。',options:['优良传统','精神标识','政治优势','制度优势'],answer:[1],explanation:'P53'},
+{id:38,chapter:2,type:'single',question:'全面建成小康社会是实现中华民族伟大复兴中国梦的（    ）。',options:['根本保证','重要基础','关键一步','必然要求'],answer:[2],explanation:'P35'},
+{id:39,chapter:2,type:'single',question:'中国式现代化是中国共产党领导的（    ）现代化，这是对中国式现代化的定性，是管总、管根本的。',options:['资本主义','社会主义','民主主义','科学主义'],answer:[1],explanation:'P44,47'},
+{id:40,chapter:2,type:'multiple',question:'中国式现代化的中国特色包括（    ）。',options:['人口规模巨大的现代化','全体人民共同富裕的现代化','物质文明和精神文明相协调的现代化','人与自然和谐共生的现代化','走和平发展道路的现代化'],answer:[0,1,2,3,4],explanation:'P44-46'},
+{id:41,chapter:2,type:'multiple',question:'推进中国式现代化需要牢牢把握的重大原则包括（    ）。',options:['坚持和加强党的全面领导','坚持中国特色社会主义道路','坚持以人民为中心的发展思想','坚持深化改革开放','坚持发扬斗争精神'],answer:[0,1,2,3,4],explanation:'P50-51'},
+{id:42,chapter:2,type:'multiple',question:'中国式现代化（    ）。',options:['创造了人类文明新形态','提供了一种全新的现代化模式','是对西方式现代化理论和实践的重大超越','为广大发展中国家提供了全新选择'],answer:[0,1,2,3],explanation:'P48-49'},
+{id:43,chapter:2,type:'multiple',question:'推进中国式现代化需要正确处理的重大关系包括（    ）。',options:['顶层设计与实践探索','战略与策略','守正与创新','效率与公平'],answer:[0,1,2,3],explanation:'P51'},
+{id:44,chapter:2,type:'multiple',question:'全面建成小康社会（    ）。',options:['高质量完成了社会主义现代化建设"三步走"战略的第二步','使中华民族伟大复兴向前迈出新的一大步','探索了人类解决贫困问题的新路径','为推动人类文明进步作出了重大贡献'],answer:[0,1,2,3],explanation:'P39'},
+{id:45,chapter:2,type:'multiple',question:'中国式现代化既基于自身国情、又借鉴各国经验，既（    ）。',options:['传承历史文化','融合现代文明','摒弃西方模式','照搬苏联经验'],answer:[0,1],explanation:'P41'},
+{id:46,chapter:2,type:'fill',question:'中国式现代化是中国共产党领导的______现代化。',answer:'社会主义',explanation:'P44'},
+{id:47,chapter:2,type:'fill',question:'党的二十大明确，全面建成社会主义现代化强国总的战略安排是分______走。',answer:'两',explanation:'P40'},
+{id:48,chapter:2,type:'fill',question:'中国梦把国家的追求、民族的向往、人民的______融为一体。',answer:'期盼',explanation:'P37'},
+{id:49,chapter:2,type:'fill',question:'中国式现代化作为科学社会主义的最新成果，坚持社会主义______和方向。',answer:'目标',explanation:'P49'},
+{id:50,chapter:2,type:'fill',question:'中国式现代化打破了"______=西方化"的迷思。',answer:'现代化',explanation:'P48'},
+{id:51,chapter:2,type:'fill',question:'团结奋斗是中国人民创造历史伟业的______。',answer:'必由之路',explanation:'P53'},
+{id:52,chapter:3,type:'single',question:'中国特色社会主义最本质的特征是（    ）。',options:['人民当家作主','中国共产党领导','依法治国','社会主义制度'],answer:[1],explanation:'P56'},
+{id:53,chapter:3,type:'single',question:'党的领导的最高原则是（    ）。',options:['坚持民主集中制','坚持党的全面领导','党中央集中统一领导','维护党中央权威'],answer:[2],explanation:'P66'},
+{id:54,chapter:3,type:'single',question:'党的领导制度是我国的（    ）领导制度。',options:['基本','重要','根本','核心'],answer:[2],explanation:'P69'},
+{id:55,chapter:3,type:'single',question:'中国特色社会主义制度体系中具有统领地位的是（    ）。',options:['根本制度','基本制度','重要制度','党的领导制度'],answer:[3],explanation:'P69'},
+{id:56,chapter:3,type:'single',question:'（    ）是党的领导决策核心。',options:['全国人大、国务院、全国政协','中央委员会、中央政治局、中央政治局常委会','中央书记处、中央纪委、中央军委','省委、市委、县委'],answer:[1],explanation:'P71'},
+{id:57,chapter:3,type:'single',question:'党的领导是全面的、系统的、整体的，并不是说（    ）。',options:['党组织发挥领导核心作用','党组织包揽包办一切','党组织领导一切工作','党组织协调各方'],answer:[1],explanation:'P66'},
+{id:58,chapter:3,type:'single',question:'中国共产党自身优势是中国特色社会主义（    ）的主要来源。',options:['理论优势','制度优势','政治优势','组织优势'],answer:[1],explanation:'P59'},
+{id:59,chapter:3,type:'single',question:'我国国家制度和国家治理体系具有多方面的显著优势，其中（    ）是带有统领性的根本优势。',options:['人民当家作主','中国共产党领导','依法治国','社会主义制度'],answer:[1],explanation:'P59'},
+{id:60,chapter:3,type:'multiple',question:'为什么必须坚持党的全面领导？（    ）',options:['中国共产党的领导地位是在历史奋斗中形成的','中国共产党领导是人民当家作主的可靠保障','中国共产党领导关系中国特色社会主义的性质、方向和命运','中国共产党领导是实现中华民族伟大复兴的根本保证'],answer:[0,1,2,3],explanation:'P57-59'},
+{id:61,chapter:3,type:'multiple',question:'中国共产党作为最高政治领导力量（    ）。',options:['不是自封的，而是在历史发展中形成的','是由我国国家性质和政治制度体系决定的','是由中华民族伟大复兴事业决定的','是自封的'],answer:[0,1,2],explanation:'P63-64'},
+{id:62,chapter:3,type:'multiple',question:'党的领导是（    ）的。',options:['全面的','系统的','整体的','局部的'],answer:[0,1,2],explanation:'P65-66'},
+{id:63,chapter:3,type:'multiple',question:'维护党中央权威和集中统一领导（    ）。',options:['是一个成熟的马克思主义执政党的重大建党原则','必须坚决贯彻党的理论、路线、方针政策和党中央的决策部署','最关键的是坚决维护习近平同志党中央的核心、全党的核心地位','同坚持党的民主集中制是完全一致的'],answer:[0,1,2,3],explanation:'P67-68'},
+{id:64,chapter:3,type:'multiple',question:'坚持和加强党的全面领导（    ）。',options:['使党的领导核心作用充分彰显','使党的政治领导力、思想引领力、群众组织力、社会号召力显著增强','为推进新时代中国特色社会主义事业提供了政治保证','使党成为风雨来袭时中国人民最可靠的主心骨'],answer:[0,1,2,3],explanation:'P61-62'},
+{id:65,chapter:3,type:'multiple',question:'党的领导制度（    ）。',options:['是我国的根本领导制度','是一个系统完备、内涵丰富的制度体系','明确了我国政治生活的领导关系、领导主体、领导对象','是中国特色社会主义制度体系的核心'],answer:[0,1,2,3],explanation:'P69-70'},
+{id:66,chapter:3,type:'multiple',question:'加强党中央对重大工作的领导（    ）。',options:['是加强党的全面领导的制度安排','是实现党的全面领导的直接体现','是我们党的优良传统和宝贵经验','必须完善党中央重大决策部署落实机制'],answer:[0,1,2,3],explanation:'P70-71'},
+{id:67,chapter:3,type:'multiple',question:'坚持和加强党的全面领导，必须健全党的全面领导制度：（    ）',options:['必须完善党在各种组织中发挥领导作用的制度','必须完善党协调各方的机制','必须完善党领导各项事业的具体制度','必须完善党管理一切事务的制度'],answer:[0,1,2],explanation:'P71-72'},
+{id:68,chapter:3,type:'fill',question:'坚持党的全面领导是坚持和发展中国特色社会主义的______。',answer:'必由之路',explanation:'P56'},
+{id:69,chapter:3,type:'fill',question:'中国最大的国情就是______的领导。',answer:'中国共产党',explanation:'P57'},
+{id:70,chapter:3,type:'fill',question:'中国特色社会主义之所以是社会主义，究其根本就在于坚持科学社会主义基本原则，在于坚持______的领导。',answer:'中国共产党',explanation:'P58'},
+{id:71,chapter:3,type:'fill',question:'中国特色社会主义制度的最大优势是______。',answer:'中国共产党领导',explanation:'P56'},
+{id:72,chapter:3,type:'fill',question:'事在四方，要在______。党中央集中统一领导是党的领导的最高原则。',answer:'中央',explanation:'P66-67'},
+{id:73,chapter:3,type:'fill',question:'党的领导是国家治理体系的______。',answer:'核心',explanation:'P69'},
+{id:74,chapter:3,type:'fill',question:'党的领导制度是中国特色社会主义制度建设的______。',answer:'关键',explanation:'P69'},
+{id:75,chapter:3,type:'fill',question:'坚持党中央集中统一领导是______政治原则。',answer:'最高',explanation:'P56'},
+{id:76,chapter:4,type:'single',question:'马克思主义的本质属性和鲜明品格是（    ）。',options:['实践性','人民性','科学性','阶级性'],answer:[1],explanation:'P74'},
+{id:77,chapter:4,type:'single',question:'我们党的最大政治优势是（    ）。',options:['理论联系实际','批评与自我批评','密切联系群众','民主集中制'],answer:[2],explanation:'P79'},
+{id:78,chapter:4,type:'single',question:'人民立场是中国共产党的（    ）政治立场。',options:['根本','基本','重要','核心'],answer:[0],explanation:'P78'},
+{id:79,chapter:4,type:'single',question:'（    ）是我们党的生命线和根本工作路线。',options:['实事求是','群众路线','独立自主','民主集中制'],answer:[1],explanation:'P84'},
+{id:80,chapter:4,type:'single',question:'（    ）是获得真知灼见的源头活水，是贯彻群众路线的有效途径。',options:['理论学习','调查研究','实践锻炼','批评与自我批评'],answer:[1],explanation:'P85'},
+{id:81,chapter:4,type:'multiple',question:'坚持人民立场，就要（    ）。',options:['始终牢记党的初心和使命','始终保持党同人民群众的血肉联系','热爱人民、尊重人民、敬畏人民','始终坚持以经济建设为中心'],answer:[0,1,2],explanation:'P78-79'},
+{id:82,chapter:4,type:'multiple',question:'人民群众是（    ）。',options:['社会物质财富的创造者','社会精神财富的创造者','社会变革的决定力量','历史发展的旁观者'],answer:[0,1,2],explanation:'P75'},
+{id:83,chapter:4,type:'multiple',question:'依靠人民创造历史伟业，必须（    ）。',options:['尊重人民主体地位','尊重人民首创精神','坚持党的领导','坚持依法治国'],answer:[0,1],explanation:'P81'},
+{id:84,chapter:4,type:'multiple',question:'为人民造福，要（    ）。',options:['着力解决人民群众最关心最直接最现实的利益问题','一件事情接着一件事情办','一年接着一年干','一蹴而就'],answer:[0,1,2],explanation:'P86'},
+{id:85,chapter:4,type:'multiple',question:'促进共同富裕，要把握好的原则包括（    ）。',options:['鼓励勤劳创新致富','坚持基本经济制度','尽力而为量力而行','坚持循序渐进'],answer:[0,1,2,3],explanation:'P88'},
+{id:86,chapter:4,type:'fill',question:'江山就是______，人民就是江山。',answer:'人民',explanation:'P75'},
+{id:87,chapter:4,type:'fill',question:'民心是最大的______，决定事业兴衰成败。',answer:'政治',explanation:'P76'},
+{id:88,chapter:4,type:'fill',question:'时代是出卷人，我们是答卷人，______是阅卷人。',answer:'人民',explanation:'P82'},
+{id:89,chapter:4,type:'fill',question:'共同富裕是中国特色社会主义的______要求，是中国式现代化的重要特征。',answer:'本质',explanation:'P87'},
+{id:90,chapter:4,type:'fill',question:'人民是我们党的______、执政之基、力量之源。',answer:'生命之根',explanation:'P81'},
+{id:91,chapter:5,type:'single',question:'改革开放是决定当代中国命运的（    ）。',options:['重要法宝','关键一招','根本保证','必由之路'],answer:[1],explanation:'P91'},
+{id:92,chapter:5,type:'single',question:'改革发展稳定中，（    ）是解决一切经济社会问题的关键。',options:['改革','发展','稳定','开放'],answer:[1],explanation:'P103'},
+{id:93,chapter:5,type:'single',question:'全面深化改革总目标是（    ）。',options:['完善中国特色社会主义制度','完善和发展中国特色社会主义制度、推进国家治理体系和治理能力现代化','实现中华民族伟大复兴','建设社会主义现代化强国'],answer:[1],explanation:'P98'},
+{id:94,chapter:5,type:'single',question:'全面深化改革以（    ）为重点。',options:['政治体制改革','经济体制改革','文化体制改革','社会体制改革'],answer:[1],explanation:'P99'},
+{id:95,chapter:5,type:'multiple',question:'改革开放使中国创造了（    ）。',options:['经济快速发展奇迹','社会长期稳定奇迹','科技领先奇迹','文化繁荣奇迹'],answer:[0,1],explanation:'P92'},
+{id:96,chapter:5,type:'multiple',question:'全面深化改革开放的正确方向包括（    ）。',options:['必须坚持和改善党的全面领导','必须坚持和完善中国特色社会主义制度','必须坚持以人民为中心','必须有利于进一步解放思想、解放和发展社会生产力、解放和增强社会活力'],answer:[0,1,2,3],explanation:'P96'},
+{id:97,chapter:5,type:'multiple',question:'改革发展稳定是我国社会主义现代化建设的三个重要支点（    ）。',options:['改革是经济社会发展的强大动力','发展是解决一切经济社会问题的关键','稳定是改革发展的前提','开放是改革发展的基础'],answer:[0,1,2],explanation:'P103'},
+{id:98,chapter:5,type:'multiple',question:'中国对外开放（    ）。',options:['不是要一家唱独角戏，而是要欢迎各方共同参与','不是要谋求势力范围，而是要支持各国共同发展','不是要营造自己的后花园，而是要建设各国共享的百花园','不是要关闭国门，而是要更大范围开放'],answer:[0,1,2],explanation:'P110'},
+{id:99,chapter:5,type:'fill',question:'改革开放是坚持和发展中国特色社会主义的______。',answer:'必由之路',explanation:'P92'},
+{id:100,chapter:5,type:'fill',question:'凡属重大改革要于法有据，需要修改法律的可以先修改法律，先______后破，有序进行。',answer:'立',explanation:'P104'},
+{id:101,chapter:5,type:'fill',question:'国家治理体系和治理能力现代化，是一个国家______的重要标志。',answer:'现代化',explanation:'P100'},
+{id:102,chapter:5,type:'fill',question:'稳定是改革发展的______。',answer:'前提',explanation:'P103'},
+{id:103,chapter:6,type:'single',question:'高质量发展是全面建设社会主义现代化国家的（    ）。',options:['重要任务','首要任务','根本任务','基本任务'],answer:[1],explanation:'P112'},
+{id:104,chapter:6,type:'single',question:'创新是引领发展的（    ）。',options:['重要动力','第一动力','核心动力','根本动力'],answer:[1],explanation:'P115'},
+{id:105,chapter:6,type:'single',question:'共享是中国特色社会主义的（    ）。',options:['根本要求','本质要求','重要特征','基本原则'],answer:[1],explanation:'P115'},
+{id:106,chapter:6,type:'single',question:'我国经济已由高速增长阶段转向（    ）发展阶段。',options:['中高速增长','高质量发展','效率优先','创新驱动'],answer:[1],explanation:'P113'},
+{id:107,chapter:6,type:'single',question:'国有企业是中国特色社会主义的重要（    ）和政治基础。',options:['经济基础','物质基础','社会基础','理论基础'],answer:[1],explanation:'P121'},
+{id:108,chapter:6,type:'single',question:'全面建设社会主义现代化国家，最艰巨最繁重的任务依然在（    ）。',options:['城市','农村','工业','服务业'],answer:[1],explanation:'P131'},
+{id:109,chapter:6,type:'multiple',question:'新发展理念包括（    ）。',options:['创新','协调','绿色','开放','共享'],answer:[0,1,2,3,4],explanation:'P115'},
+{id:110,chapter:6,type:'multiple',question:'高质量发展的战略意义包括（    ）。',options:['为全面建设社会主义现代化国家提供更为坚实的物质基础','是不断满足人民对美好生活需要的重要保证','是维护国家长治久安的必然要求','是实现共同富裕的唯一途径'],answer:[0,1,2],explanation:'P117'},
+{id:111,chapter:6,type:'multiple',question:'社会主义基本经济制度包括（    ）。',options:['公有制为主体、多种所有制经济共同发展','按劳分配为主体、多种分配方式并存','社会主义市场经济体制','人民代表大会制度'],answer:[0,1,2],explanation:'P120'},
+{id:112,chapter:6,type:'multiple',question:'构建新发展格局（    ）。',options:['是事关全局的系统性、深层次变革','是把握未来发展主动权的先手棋','是开放的国内国际双循环','是以全国统一大市场基础上的国内大循环为主体'],answer:[0,1,2,3],explanation:'P125'},
+{id:113,chapter:6,type:'multiple',question:'公有制经济和非公有制经济（    ）。',options:['都是社会主义市场经济的重要组成部分','都是我国经济社会发展的重要基础','要毫不动摇巩固和发展公有制经济','要毫不动摇鼓励、支持、引导非公有制经济发展'],answer:[0,1,2,3],explanation:'P121'},
+{id:114,chapter:6,type:'multiple',question:'实施乡村振兴战略，总要求包括（    ）。',options:['产业兴旺','生态宜居','乡风文明','治理有效、生活富裕'],answer:[0,1,2,3],explanation:'P131'},
+{id:115,chapter:6,type:'fill',question:'新发展理念是实现高质量发展的______。',answer:'指导原则',explanation:'P113'},
+{id:116,chapter:6,type:'fill',question:'协调是持续发展的______要求。',answer:'内在',explanation:'P115'},
+{id:117,chapter:6,type:'fill',question:'绿色是永续发展的______条件。',answer:'必要',explanation:'P115'},
+{id:118,chapter:6,type:'fill',question:'开放是国家繁荣发展的______。',answer:'必由之路',explanation:'P115'},
+{id:119,chapter:6,type:'fill',question:'构建高水平社会主义市场经济体制，关键是要处理好______和市场的关系。',answer:'政府',explanation:'P124'},
+{id:120,chapter:6,type:'fill',question:'建设现代化经济体系是我国发展的______。',answer:'战略目标',explanation:'P129'},
+{id:121,chapter:7,type:'single',question:'教育、科技、人才是全面建设社会主义现代化国家的（    ）。',options:['重要支撑','基础性、战略性支撑','根本保障','关键力量'],answer:[1],explanation:'P135'},
+{id:122,chapter:7,type:'single',question:'科技自立自强是国家强盛之（    ）、安全之（    ）。',options:['基；要','本；基','要；基','基；要'],answer:[3],explanation:'P146'},
+{id:123,chapter:7,type:'single',question:'基础研究是科技创新的（    ）。',options:['根本','源头','关键','核心'],answer:[1],explanation:'P150'},
+{id:124,chapter:7,type:'single',question:'培养什么人、怎样培养人、为谁培养人是教育的（    ），也是建设教育强国的核心课题。',options:['基本任务','根本问题','重要目标','核心内容'],answer:[1],explanation:'P142'},
+{id:125,chapter:7,type:'multiple',question:'实施创新驱动发展战略，要坚持面向（    ）。',options:['世界科技前沿','经济主战场','国家重大需求','人民生命健康'],answer:[0,1,2,3],explanation:'P139'},
+{id:126,chapter:7,type:'multiple',question:'建设教育强国是（    ）。',options:['全面建成社会主义现代化强国的战略先导','实现高水平科技自立自强的重要支撑','促进全体人民共同富裕的有效途径','以中国式现代化全面推进中华民族伟大复兴的基础工程'],answer:[0,1,2,3],explanation:'P140'},
+{id:127,chapter:7,type:'multiple',question:'必须坚持（    ），加快教育强国、科技强国、人才强国建设。',options:['科技是第一生产力','人才是第一资源','创新是第一动力','教育是第一基础'],answer:[0,1,2],explanation:'P135'},
+{id:128,chapter:7,type:'multiple',question:'坚持党对人才工作的全面领导是做好人才工作的（    ）。',options:['根本保证','重要保障','社会条件','基本前提'],answer:[0],explanation:'P154'},
+{id:129,chapter:7,type:'fill',question:'全面建设社会主义现代化国家，教育是______，科技是关键，人才是基础。',answer:'根本',explanation:'P135'},
+{id:130,chapter:7,type:'fill',question:'科教兴国是我国的______。',answer:'基本国策',explanation:'P138'},
+{id:131,chapter:7,type:'fill',question:'育人的根本在于______。',answer:'立德',explanation:'P142'},
+{id:132,chapter:7,type:'fill',question:'人才是实现民族振兴、赢得国际竞争主动的______资源。',answer:'战略',explanation:'P151'},
+{id:133,chapter:8,type:'single',question:'（    ）是一个政党、一个国家的最大优势。',options:['理论优势','制度优势','政治优势','组织优势'],answer:[1],explanation:'P157'},
+{id:134,chapter:8,type:'single',question:'人民民主是社会主义的（    ）。',options:['根本保证','生命','重要基础','核心内容'],answer:[1],explanation:'P159'},
+{id:135,chapter:8,type:'single',question:'全过程人民民主是社会主义民主政治的（    ）。',options:['重要形式','伟大创造','本质属性','根本保证'],answer:[2],explanation:'P166'},
+{id:136,chapter:8,type:'single',question:'协商民主是实践全过程人民民主的（    ）形式。',options:['唯一','重要','基本','核心'],answer:[1],explanation:'P172'},
+{id:137,chapter:8,type:'single',question:'民族团结是我国各族人民的（    ）。',options:['根本保证','重要基础','生命线','核心内容'],answer:[2],explanation:'P177'},
+{id:138,chapter:8,type:'multiple',question:'全过程人民民主实现了（    ）的统一。',options:['过程民主和成果民主','程序民主和实质民主','直接民主和间接民主','人民民主和国家意志'],answer:[0,1,2,3],explanation:'P165'},
+{id:139,chapter:8,type:'multiple',question:'全过程人民民主是（    ）的民主。',options:['最广泛','最真实','最管用','最先进'],answer:[0,1,2],explanation:'P168'},
+{id:140,chapter:8,type:'multiple',question:'我国的基本政治制度包括（    ）。',options:['中国共产党领导的多党合作和政治协商制度','民族区域自治制度','基层群众自治制度','人民代表大会制度'],answer:[0,1,2],explanation:'P171'},
+{id:141,chapter:8,type:'multiple',question:'新型政党制度的特点是（    ）。',options:['共产党领导、多党派合作','共产党执政、多党派参政','长期共存、互相监督','肝胆相照、荣辱与共'],answer:[0,1,2,3],explanation:'P171'},
+{id:142,chapter:8,type:'multiple',question:'统一战线是（    ）。',options:['中国共产党夺取革命、建设、改革事业胜利的重要法宝','实现中华民族伟大复兴的重要法宝','坚持党的领导是统一战线最核心、最根本的问题','民族团结是我国各族人民的生命线'],answer:[0,1],explanation:'P175-176'},
+{id:143,chapter:8,type:'fill',question:'全过程人民民主是______、全方位、全覆盖的民主。',answer:'全链条',explanation:'P166'},
+{id:144,chapter:8,type:'fill',question:'中国共产党领导是中国发展全过程人民民主的______保证。',answer:'根本',explanation:'P163'},
+{id:145,chapter:8,type:'fill',question:'中华民族共同体意识是民族团结之______。',answer:'本',explanation:'P177'},
+{id:146,chapter:8,type:'fill',question:'坚持中国特色社会主义制度自信，首先要坚定对中国特色社会主义______制度的自信。',answer:'政治',explanation:'P158'},
+{id:147,chapter:8,type:'fill',question:'中国特色社会主义政治制度，坚持______地位，充分体现人民意志、保障人民权益、激发人民创造活力。',answer:'人民主体',explanation:'P158'},
+{id:148,chapter:9,type:'single',question:'法治是治国理政的（    ）方式。',options:['重要','基本','根本','核心'],answer:[1],explanation:'P182'},
+{id:149,chapter:9,type:'single',question:'全面依法治国是国家治理的一场深刻（    ）。',options:['变革','革命','改革','创新'],answer:[1],explanation:'P183'},
+{id:150,chapter:9,type:'single',question:'全面依法治国总目标是建设中国特色社会主义（    ）、建设社会主义法治国家。',options:['法治体系','法治体系','法律体系','法制体系'],answer:[1],explanation:'P182'},
+{id:151,chapter:9,type:'single',question:'党和法的关系是（    ）关系的集中反映，是全面依法治国的一个根本问题。',options:['法律和道德','改革和法治','政治和法治','依法治国和依规治党'],answer:[2],explanation:'P187'},
+{id:152,chapter:9,type:'single',question:'宪法的生命在于（    ），宪法的权威也在于（    ）。',options:['制定；执行','实施；遵守','实施；实施','宣传；教育'],answer:[2],explanation:'P192'},
+{id:153,chapter:9,type:'single',question:'公正司法是维护社会公平正义的（    ）。',options:['重要防线','最后一道防线','基本保障','根本保证'],answer:[1],explanation:'P198'},
+{id:154,chapter:9,type:'multiple',question:'中国特色社会主义法治道路的核心要义包括（    ）。',options:['坚持党的领导','坚持中国特色社会主义制度','贯彻中国特色社会主义法治理论','坚持人民民主专政'],answer:[0,1,2],explanation:'P185'},
+{id:155,chapter:9,type:'multiple',question:'全面依法治国必须把握的原则包括（    ）。',options:['坚持中国共产党的领导','坚持以人民为中心','坚持法律面前人人平等','坚持依法治国和以德治国相结合','坚持从中国实际出发'],answer:[0,1,2,3,4],explanation:'P186-187'},
+{id:156,chapter:9,type:'multiple',question:'中国特色社会主义法治体系包括（    ）。',options:['法律规范体系','法治实施体系','法治监督体系','法治保障体系','党内法规体系'],answer:[0,1,2,3,4],explanation:'P189'},
+{id:157,chapter:9,type:'multiple',question:'全面依法治国必须正确处理的关系包括（    ）。',options:['政治和法治','改革和法治','依法治国和以德治国','依法治国和依规治党'],answer:[0,1,2,3],explanation:'P187'},
+{id:158,chapter:9,type:'multiple',question:'宪法是（    ）。',options:['国家的根本法','治国安邦的总章程','党和人民意志的集中体现','具有最高的法律地位、法律权威、法律效力'],answer:[0,1,2,3],explanation:'P190'},
+{id:159,chapter:9,type:'multiple',question:'加快建设法治中国，必须坚持（    ）。',options:['依法治国、依法执政、依法行政共同推进','法治国家、法治政府、法治社会一体建设','统筹推进国内法治和涉外法治','科学立法、严格执法、公正司法、全民守法'],answer:[0,1,2,3],explanation:'P196-197'},
+{id:160,chapter:9,type:'fill',question:'法治是治国理政的______方式。',answer:'基本',explanation:'P182'},
+{id:161,chapter:9,type:'fill',question:'全面依法治国是坚持和发展中国特色社会主义的______要求和重要保障。',answer:'本质',explanation:'P182'},
+{id:162,chapter:9,type:'fill',question:'法律是成文的______，道德是内心的法律。',answer:'道德',explanation:'P188'},
+{id:163,chapter:9,type:'fill',question:'宪法是国家的______法，是治国安邦的总章程。',answer:'根本',explanation:'P190'},
+{id:164,chapter:9,type:'fill',question:'法治监督体系以规范和约束______的运行为重点。',answer:'公权力',explanation:'P193'},
+{id:165,chapter:9,type:'fill',question:'一个现代化国家必然是______国家。',answer:'法治',explanation:'P195'},
+{id:166,chapter:10,type:'single',question:'文化是一个国家、一个民族的（    ）。',options:['根基','灵魂','精神','动力'],answer:[1],explanation:'P201'},
+{id:167,chapter:10,type:'single',question:'建设社会主义文化强国，关键在于坚定中国特色社会主义（    ）。',options:['道路自信','理论自信','制度自信','文化自信'],answer:[3],explanation:'P202'},
+{id:168,chapter:10,type:'single',question:'意识形态工作是为国家立心、为民族（    ）的工作。',options:['立德','立魂','立命','立志'],answer:[1],explanation:'P206'},
+{id:169,chapter:10,type:'single',question:'马克思主义是我们立党立国、兴党兴国的（    ）。',options:['重要指导','根本指导思想','基本原则','核心内容'],answer:[1],explanation:'P206'},
+{id:170,chapter:10,type:'single',question:'核心价值观是一个民族赖以维系的精神纽带，是一个国家共同的（    ）。',options:['思想基础','思想道德基础','文化基础','理论基础'],answer:[1],explanation:'P212'},
+{id:171,chapter:10,type:'multiple',question:'文化繁荣兴盛是（    ）。',options:['实现中华民族伟大复兴的精神支撑','建设社会主义现代化强国的应有之义','满足人民日益增长的美好生活需要的内在要求','在世界文化激荡中站稳脚跟的前提基础'],answer:[0,1,2,3],explanation:'P202'},
+{id:172,chapter:10,type:'multiple',question:'坚定文化自信的深厚基础包括（    ）。',options:['中华优秀传统文化','革命文化','社会主义先进文化','中国特色社会主义伟大实践'],answer:[0,1,2,3],explanation:'P203-204'},
+{id:173,chapter:10,type:'multiple',question:'中华文明的突出特性包括（    ）。',options:['连续性','创新性','统一性','包容性','和平性'],answer:[0,1,2,3,4],explanation:'P217'},
+{id:174,chapter:10,type:'multiple',question:'建设社会主义文化强国，必须（    ）。',options:['坚持中国特色社会主义文化发展道路','增强文化自信','围绕举旗帜、聚民心、育新人、兴文化、展形象','激发全民族文化创新创造活力'],answer:[0,1,2,3],explanation:'P204'},
+{id:175,chapter:10,type:'multiple',question:'意识形态（    ）。',options:['关乎旗帜','关乎道路','关乎国家政治安全','决定文化前进方向和发展道路'],answer:[0,1,2,3],explanation:'P206'},
+{id:176,chapter:10,type:'fill',question:'文化兴则______兴，文化强则民族强。',answer:'国运',explanation:'P200'},
+{id:177,chapter:10,type:'fill',question:'中国特色社会主义文化发展道路，是推动社会主义文化繁荣兴盛的______正确道路。',answer:'唯一',explanation:'P204'},
+{id:178,chapter:10,type:'fill',question:'坚持为人民服务、为社会主义服务的根本方向，是决定社会主义文化事业______命运的关键。',answer:'前途',explanation:'P205'},
+{id:179,chapter:10,type:'fill',question:'在新的起点上继续推动文化繁荣、建设文化强国、建设中华民族______文明，是新时代新的文化使命。',answer:'现代',explanation:'P217'},
+{id:180,chapter:10,type:'fill',question:'创造性转化，就是要按照时代特点和要求，对那些至今仍有借鉴价值的内涵和陈旧的表现形式加以______，赋予其新的时代内涵和现代表达形式。',answer:'改造',explanation:'P219'},
+{id:181,chapter:11,type:'single',question:'让人民生活幸福是（    ）。',options:['国家大事','"国之大者"','民生之源','根本任务'],answer:[1],explanation:'P225'},
+{id:182,chapter:11,type:'single',question:'发展是改善民生的（    ）。',options:['重要前提','物质基础','根本保证','必要条件'],answer:[1],explanation:'P228'},
+{id:183,chapter:11,type:'single',question:'（    ）是民生之源，是改善民生、实现发展成果由人民共享最重要最直接的方式。',options:['就业','收入分配','社会保障','教育'],answer:[1],explanation:'P230'},
+{id:184,chapter:11,type:'single',question:'就业是最基本的（    ）。',options:['民生','就业','社会保障','经济发展'],answer:[0],explanation:'P231'},
+{id:185,chapter:11,type:'single',question:'基层治理是国家治理的（    ）。',options:['核心','重要领域','基石','基础'],answer:[2],explanation:'P238'},
+{id:186,chapter:11,type:'multiple',question:'增进民生福祉是（    ）。',options:['坚持立党为公、执政为民的本质要求','社会主义生产的根本目的','全面建设社会主义现代化国家的应有之义','解决一切问题的关键'],answer:[0,1,2],explanation:'P225'},
+{id:187,chapter:11,type:'multiple',question:'民生涉及的领域包括（    ）。',options:['分配、就业','教育、医疗','住房、社会保障','以上都是'],answer:[0,1,2],explanation:'P225'},
+{id:188,chapter:11,type:'multiple',question:'保障和改善民生的工作思路包括（    ）。',options:['坚守底线','突出重点','完善制度','引导预期'],answer:[0,1,2,3],explanation:'P228'},
+{id:189,chapter:11,type:'multiple',question:'加强和创新社会治理，要求坚持（    ）。',options:['系统治理','依法治理','综合治理','源头治理'],answer:[0,1,2,3],explanation:'P235'},
+{id:190,chapter:11,type:'multiple',question:'人民健康是（    ）。',options:['社会文明进步的基础','民族昌盛和国家富强的重要标志','促进人的全面发展的必然要求','国家长治久安的保证'],answer:[0,1,2],explanation:'P234'},
+{id:191,chapter:11,type:'fill',question:'发展是解决民生问题的"______"，民生是发展的"指南针"。',answer:'总钥匙',explanation:'P228'},
+{id:192,chapter:11,type:'fill',question:'坚持尽力而为、______，是保障和改善民生的重要方针。',answer:'量力而行',explanation:'P229'},
+{id:193,chapter:11,type:'fill',question:'"就业是最大的______工程、民心工程、根基工程，必须抓紧抓实抓好。',answer:'民生',explanation:'P232'},
+{id:194,chapter:11,type:'fill',question:'推进______现代化是推进国家治理体系和治理能力现代化的重要内容。',answer:'社会治理',explanation:'P235'},
+{id:195,chapter:11,type:'fill',question:'城乡社区是社会治理最基本的______，是党和政府联系、服务居民群众的"最后一公里"。',answer:'单元',explanation:'P238'},
+{id:196,chapter:12,type:'single',question:'生态文明建设是关系中华民族永续发展的（    ）。',options:['重要任务','根本大计','核心内容','基本要求'],answer:[1],explanation:'P241'},
+{id:197,chapter:12,type:'single',question:'良好的生态环境是最公平的公共产品，是最普惠的（    ）。',options:['民生福祉','社会财富','人民权益','基本权利'],answer:[0],explanation:'P246'},
+{id:198,chapter:12,type:'single',question:'绿色发展，就其要义来讲，是要解决好（    ）问题。',options:['生态环境保护','人与自然和谐共生','经济发展与环境保护','可持续发展'],answer:[1],explanation:'P248'},
+{id:199,chapter:12,type:'single',question:'中国是全球生态文明建设的重要（    ）。',options:['参与者、贡献者','参与者、贡献者、引领者','参与者','贡献者'],answer:[1],explanation:'P253'},
+{id:200,chapter:12,type:'single',question:'"一带一路"是一条（    ）之路。',options:['经济发展','绿色发展','文化交流','科技创新'],answer:[1],explanation:'P257'},
+{id:201,chapter:12,type:'multiple',question:'共建清洁美丽世界，要（    ）。',options:['坚持以人为本','坚持科学治理','坚持多边主义','坚持共同但有区别的责任原则'],answer:[0,1,2,3],explanation:'P255-256'},
+{id:202,chapter:12,type:'multiple',question:'建设美丽中国的路径包括（    ）。',options:['加快形成绿色生产方式和生活方式','坚持山水林田湖草沙一体化保护和系统治理','用最严格制度最严密法治保护生态环境','推进"双碳"工作'],answer:[0,1,2,3],explanation:'P248-252'},
+{id:203,chapter:12,type:'multiple',question:'生态文明建设是（    ）。',options:['重大经济问题','关系党的使命宗旨的重大政治问题','关系民生福祉的重大社会问题','关系中华民族永续发展的根本大计'],answer:[0,1,2,3],explanation:'P246'},
+{id:204,chapter:12,type:'multiple',question:'生态环境问题是（    ）。',options:['全人类共同面临的问题','保持良好生态环境是各国人民的共同心愿和共同责任','中国自己的问题','发展中国家的问题'],answer:[0,1],explanation:'P254'},
+{id:205,chapter:12,type:'multiple',question:'处理好绿水青山和金山银山的关系，关键在（    ）。',options:['人','思路','技术','制度'],answer:[0,1],explanation:'P245'},
+{id:206,chapter:12,type:'fill',question:'生态环境是人类生存最为基础的条件，生态文明建设是关系中华民族______发展的根本大计。',answer:'永续',explanation:'P241'},
+{id:207,chapter:12,type:'fill',question:'要像保护______一样保护生态环境，像对待生命一样对待生态环境。',answer:'眼睛',explanation:'P242'},
+{id:208,chapter:12,type:'fill',question:'绿水青山就是______，这是重要的发展理念，也是推进现代化建设的重大原则。',answer:'金山银山',explanation:'P244'},
+{id:209,chapter:12,type:'fill',question:'良好的生态环境是最公平的______，是最普惠的民生福祉。',answer:'公共产品',explanation:'P246'},
+{id:210,chapter:12,type:'fill',question:'必须把______建设作为生态文明建设的重中之重，把生态文明建设纳入制度化、法治化轨道。',answer:'制度',explanation:'P252'},
+{id:211,chapter:13,type:'single',question:'国家安全是民族复兴的（    ），社会稳定是国家强盛的前提。',options:['重要基础','根基','根本保证','必要条件'],answer:[1],explanation:'P260'},
+{id:212,chapter:13,type:'single',question:'总体国家安全观的关键是（    ）。',options:['人民安全','"总体"','政治安全','经济安全'],answer:[1],explanation:'P263'},
+{id:213,chapter:13,type:'single',question:'政治安全是国家安全的（    ）。',options:['根本保证','重要基础','根本','核心内容'],answer:[2],explanation:'P267'},
+{id:214,chapter:13,type:'single',question:'总体国家安全观以人民安全为（    ）。',options:['根本','重要基础','核心内容','宗旨'],answer:[3],explanation:'P262'},
+{id:215,chapter:13,type:'multiple',question:'总体国家安全观的主要内容集中体现为"十个坚持"，包括（    ）。',options:['坚持党对国家安全工作的绝对领导','坚持以人民安全为宗旨','坚持统筹发展和安全','坚持把政治安全放在首要位置'],answer:[0,1,2,3],explanation:'P263'},
+{id:216,chapter:13,type:'multiple',question:'政治安全与人民安全、国家利益至上的关系是（    ）。',options:['政治安全是维护人民安全和国家利益的根本保证','人民安全居于中心地位，国家安全归根到底是保障人民利益','国家利益至上是实现政治安全和人民安全的要求和原则','三者有机统一'],answer:[0,1,2,3],explanation:'P268'},
+{id:217,chapter:13,type:'multiple',question:'构建统筹各领域安全的新安全格局，必须（    ）。',options:['把维护政治安全作为应对各领域安全风险挑战的首要任务','把维护意识形态安全摆在极端重要位置','把意识形态工作的领导权、管理权、话语权牢牢掌握在党的手中','坚持底线思维和极限思维'],answer:[0,1,2,3],explanation:'P267-268'},
+{id:218,chapter:13,type:'multiple',question:'统筹发展和安全，是（    ）。',options:['党和国家的一项基础性工作','我们党治国理政的一个重大原则','构建新发展格局的重要前提和保障','推动创新发展的基础'],answer:[0,1,2],explanation:'P266'},
+{id:219,chapter:13,type:'fill',question:'国家安全是关乎国家发展稳定和社会______的重大战略问题。',answer:'长治久安',explanation:'P259'},
+{id:220,chapter:13,type:'fill',question:'国家安全是民族复兴的______，社会稳定是国家强盛的前提。',answer:'根基',explanation:'P260'},
+{id:221,chapter:13,type:'fill',question:'发展解决的是______问题，是推动国家和民族赓续绵延的根本支撑。',answer:'动力',explanation:'P266'},
+{id:222,chapter:13,type:'fill',question:'建设平安中国，是全面建设社会主义现代化国家的______内容和重要保障。',answer:'重要',explanation:'P272'},
+{id:223,chapter:14,type:'single',question:'党在新时代的强军目标是建设一支听党指挥、（    ）、作风优良的人民军队。',options:['能打胜仗','政治合格','本领高强','纪律严明'],answer:[0],explanation:'P282'},
+{id:224,chapter:14,type:'single',question:'听党指挥是人民军队的（    ），决定军队建设的政治方向。',options:['灵魂','核心','保证','根本'],answer:[0],explanation:'P283-284'},
+{id:225,chapter:14,type:'single',question:'（    ）是人民军队的立军之本。',options:['政治建军','科技强军','人才强军','依法治军'],answer:[0],explanation:'P288'},
+{id:226,chapter:14,type:'single',question:'科技是（    ），是军事发展中最活跃、最具革命性的因素。',options:['第一战斗力','核心战斗力','重要战斗力','基础战斗力'],answer:[1],explanation:'P289'},
+{id:227,chapter:14,type:'single',question:'军政军民团结是实现富国和强军相统一的（    ）。',options:['根本保证','重要政治保障','基础条件','核心内容'],answer:[1],explanation:'P294'},
+{id:228,chapter:14,type:'multiple',question:'新时代人民军队的使命任务包括（    ）。',options:['巩固中国共产党领导和我国社会主义制度','捍卫国家主权、统一、领土完整','维护我国海外利益','促进世界和平与发展'],answer:[0,1,2,3],explanation:'P280'},
+{id:229,chapter:14,type:'multiple',question:'强军目标的内涵是（    ）。',options:['听党指挥是灵魂','能打胜仗是核心','作风优良是保证','政治合格是基础'],answer:[0,1,2],explanation:'P283-284'},
+{id:230,chapter:14,type:'multiple',question:'坚持党对人民军队的绝对领导制度包括（    ）。',options:['军队最高领导权和指挥权属于党中央、中央军委','中央军委实行主席负责制','实行党委制、政治委员制、政治机关制','实行支部建在连上'],answer:[0,1,2,3],explanation:'P287'},
+{id:231,chapter:14,type:'multiple',question:'实现建军一百年奋斗目标是（    ）。',options:['党中央、中央军委着眼国家安全和发展战略全局作出的重大决策','加快推进国防和军队现代化的必然要求','实现党在新时代强军目标的必由之路','2027年要实现的目标'],answer:[0,1,2,3],explanation:'P285'},
+{id:232,chapter:14,type:'multiple',question:'依法治军是（    ）。',options:['我党建军治军的基本方式','一支现代化军队必然是法治军队','军队建设的根本保证','人民军队的立军之本'],answer:[0,1],explanation:'P290'},
+{id:233,chapter:14,type:'fill',question:'国防和军队建设是捍卫国家主权、______和发展利益的坚强后盾。',answer:'安全',explanation:'P278'},
+{id:234,chapter:14,type:'fill',question:'人民军队是执行党的______任务的武装集团。',answer:'政治',explanation:'P279'},
+{id:235,chapter:14,type:'fill',question:'2035年基本实现国防和军队______，到本世纪中叶把人民军队全面建成世界一流军队。',answer:'现代化',explanation:'P284'},
+{id:236,chapter:14,type:'fill',question:'人才是推动人民军队______发展、赢得军事竞争和未来战争主动的关键因素。',answer:'高质量',explanation:'P289'},
+{id:237,chapter:14,type:'fill',question:'改革是决定人民军队______发展、制胜未来的关键一招。',answer:'壮大',explanation:'P289'},
+{id:238,chapter:15,type:'single',question:'"一国两制"是党领导人民实现祖国和平统一的一项重要制度，是国家的一项（    ）。',options:['重要政策','基本国策','战略部署','根本任务'],answer:[1],explanation:'P296'},
+{id:239,chapter:15,type:'single',question:'"一国两制"构想最早是针对（    ）问题提出来的。',options:['香港','澳门','台湾','海外'],answer:[2],explanation:'P297'},
+{id:240,chapter:15,type:'single',question:'"一国两制"的根本宗旨是维护（    ）。',options:['国家统一','香港繁荣稳定','国家主权、安全、发展利益','人民福祉'],answer:[2],explanation:'P299'},
+{id:241,chapter:15,type:'single',question:'"和平统一、一国两制"方针是实现两岸统一的（    ）。',options:['唯一方式','最佳方式','基本方式','重要方式'],answer:[1],explanation:'P311'},
+{id:242,chapter:15,type:'multiple',question:'"一国两制"（    ）。',options:['是中国特色社会主义的伟大创举','是中国特色社会主义制度创新的重要成果','是中国共产党领导人民实现祖国和平统一的伟大构想','为国际社会解决类似问题提供了新思路新方案'],answer:[0,1,2,3],explanation:'P297'},
+{id:243,chapter:15,type:'multiple',question:'解决台湾问题、实现祖国完全统一，是（    ）。',options:['党矢志不渝的历史任务','全体中华儿女的共同愿望','实现中华民族伟大复兴的必然要求','国际社会的普遍共识'],answer:[0,1,2],explanation:'P308'},
+{id:244,chapter:15,type:'multiple',question:'坚持"一国两制"方针，必须（    ）。',options:['坚持一个中国原则和"九二共识"','坚持推动两岸关系和平发展、融合发展','坚持"和平统一、一国两制"基本方针','以最大诚意、尽最大努力争取和平统一的前景'],answer:[0,1,2,3],explanation:'P310-312'},
+{id:245,chapter:15,type:'multiple',question:'香港、澳门特别行政区享有的高度自治权包括（    ）。',options:['行政管理权','立法权','独立的司法权和终审权','外交权'],answer:[0,1,2],explanation:'P297'},
+{id:246,chapter:15,type:'fill',question:'"一国"是实行"两制"的______和基础，"两制"从属和派生于"一国"并统一于"一国"之内。',answer:'前提',explanation:'P299'},
+{id:247,chapter:15,type:'fill',question:'依法治港治澳是全面______的应有之义，是全面准确贯彻"一国两制"方针的必由之路。',answer:'依法治国',explanation:'P300'},
+{id:248,chapter:15,type:'fill',question:'中央政府对香港特别行政区有关的国家安全事务负有______责任。',answer:'根本',explanation:'P305'},
+{id:249,chapter:15,type:'fill',question:'确保国家主权和领土完整是国家______，是一条不可逾越的红线。',answer:'核心利益',explanation:'P312'},
+{id:250,chapter:16,type:'single',question:'中国特色大国外交以推动构建（    ）为总目标。',options:['新型国际关系','人类命运共同体','和谐世界','世界多极化'],answer:[1],explanation:'P319'},
+{id:251,chapter:16,type:'single',question:'维护国家主权、安全、发展利益是我国对外工作的（    ）。',options:['根本任务','出发点和落脚点','重要目标','基本原则'],answer:[1],explanation:'P326'},
+{id:252,chapter:16,type:'single',question:'走和平发展道路，要坚定奉行（    ）的和平外交政策。',options:['独立自主','开放包容','合作共赢','互利互惠'],answer:[0],explanation:'P323'},
+{id:253,chapter:16,type:'single',question:'多边主义符合各国人民利益，是维护和平、促进发展的（    ）。',options:['根本途径','有效途径','重要方式','基本原则'],answer:[1],explanation:'P333'},
+{id:254,chapter:16,type:'multiple',question:'推动构建新型国际关系，就要秉持（    ）原则。',options:['相互尊重','公平正义','合作共赢','独立自主'],answer:[0,1,2],explanation:'P323'},
+{id:255,chapter:16,type:'multiple',question:'推动构建人类命运共同体（    ）。',options:['是当代中国共产党人回答和解决关乎人类前途命运的时代之问的中国方案','是应对人类共同挑战、建设更加繁荣美好世界的人间正道','是新时代对外工作的总目标','是中国特色大国外交的总目标'],answer:[0,1,2,3],explanation:'P328'},
+{id:256,chapter:16,type:'multiple',question:'中国特色大国外交（    ）。',options:['建立在正确的历史观、大局观、角色观基础之上','牢牢把握服务民族复兴、促进人类进步这条主线','以推动构建人类命运共同体为总目标','走出一条中国特色大国外交新路'],answer:[0,1,2,3],explanation:'P318-321'},
+{id:257,chapter:16,type:'multiple',question:'坚持走和平发展道路，必须（    ）。',options:['推动构建新型国际关系','坚决维护国家主权、安全、发展利益','彰显外交为民宗旨','坚定奉行独立自主的和平外交政策'],answer:[0,1,2,3],explanation:'P321-323'},
+{id:258,chapter:16,type:'fill',question:'中国特色大国外交牢牢把握服务______、促进人类进步这条主线。',answer:'民族复兴',explanation:'P318'},
+{id:259,chapter:16,type:'fill',question:'践行真正的多边主义，维护以______宗旨和原则为基础的国际关系基本准则。',answer:'联合国宪章',explanation:'P333'},
+{id:260,chapter:16,type:'fill',question:'共建"______"是推动构建人类命运共同体的实践平台。',answer:'一带一路',explanation:'P334'},
+{id:261,chapter:16,type:'fill',question:'中国外交始终坚守外交______的宗旨，把为民服务、为民解忧作为重要职责。',answer:'为民',explanation:'P327'},
+{id:262,chapter:17,type:'single',question:'全面建设社会主义现代化国家、全面推进中华民族伟大复兴，关键在党，关键在（    ）。',options:['党的领导','全面从严治党','党的建设','反腐败斗争'],answer:[1],explanation:'P337'},
+{id:263,chapter:17,type:'single',question:'全面从严治党，核心是加强（    ），基础在全面，关键在严，要害在治。',options:['党的建设','党的领导','党的纪律','党的作风'],answer:[1],explanation:'P341'},
+{id:264,chapter:17,type:'single',question:'党的（    ）是党的根本性建设。',options:['思想建设','组织建设','政治建设','作风建设'],answer:[2],explanation:'P344'},
+{id:265,chapter:17,type:'single',question:'勇于（    ），是中国共产党区别于其他政党的显著标志。',options:['理论创新','实践创新','自我革命','制度创新'],answer:[2],explanation:'P357'},
+{id:266,chapter:17,type:'multiple',question:'党面临的"四大考验"包括（    ）。',options:['执政考验','改革开放考验','市场经济考验','外部环境考验'],answer:[0,1,2,3],explanation:'P340'},
+{id:267,chapter:17,type:'multiple',question:'党面临的"四种危险"包括（    ）。',options:['精神懈怠危险','能力不足危险','脱离群众危险','消极腐败危险'],answer:[0,1,2,3],explanation:'P340'},
+{id:268,chapter:17,type:'multiple',question:'全面从严治党体系包括（    ）。',options:['布局合理','内容科学','要素齐备','统一高效'],answer:[0,1,2,3],explanation:'P341'},
+{id:269,chapter:17,type:'multiple',question:'勇于自我革命就要实现（    ）。',options:['自我净化','自我完善','自我革新','自我提高'],answer:[0,1,2,3],explanation:'P357'},
+{id:270,chapter:17,type:'fill',question:'全面从严治党，坚持把______建设放在首位。',answer:'政治',explanation:'P342'},
+{id:271,chapter:17,type:'fill',question:'深入推进全面从严治党，必须把______建设作为基础性建设。',answer:'思想',explanation:'P346'},
+{id:272,chapter:17,type:'fill',question:'作风问题核心是党同______的关系问题。',answer:'人民群众',explanation:'P349'},
+{id:273,chapter:17,type:'fill',question:'我们党作为执政党，面临的最大威胁就是______。',answer:'腐败',explanation:'P352'}];
+
+let currentChapter=-1,currentType='all',answers={};
+
+function loadAnswers(){try{const d=localStorage.getItem('xi_thought_answers');if(d)answers=JSON.parse(d)}catch(e){}}
+function saveAnswers(){localStorage.setItem('xi_thought_answers',JSON.stringify(answers))}
+
+function renderNav(){
+const nav=document.getElementById('navList');
+let html='<div class="nav-item'+(currentChapter===-1?' active':'')+'" onclick="selectChapter(-1)">全部 <span class="count">('+questions.length+')</span></div>';
+chapters.forEach((ch,i)=>{
+const cnt=questions.filter(q=>q.chapter===i).length;
+if(cnt>0) html+='<div class="nav-item'+(currentChapter===i?' active':'')+'" onclick="selectChapter('+i+')">'+ch+' <span class="count">('+cnt+')</span></div>';
+});
+nav.innerHTML=html;
+}
+
+function selectChapter(ch){currentChapter=ch;renderNav();renderQuestions()}
+
+function getFiltered(){
+let qs=questions;
+if(currentChapter>=0) qs=qs.filter(q=>q.chapter===currentChapter);
+if(currentType!=='all') qs=qs.filter(q=>q.type===currentType);
+return qs;
+}
+
+function renderQuestions(){
+const qs=getFiltered();
+const area=document.getElementById('questionArea');
+if(!qs.length){area.innerHTML='<div class="empty-tip">暂无题目</div>';updateStats();return}
+let html='';
+qs.forEach(q=>{
+const a=answers[q.id];
+const answered=!!a;
+const isCorrect=answered&&checkCorrect(q,a);
+const cardCls=answered?(isCorrect?'correct':'wrong'):'';
+const typeLabel=q.type==='single'?'单选题':q.type==='multiple'?'多选题':'填空题';
+const typeCls=q.type;
+html+='<div class="q-card '+cardCls+'" id="qcard_'+q.id+'">';
+html+='<div class="q-header"><div class="q-num">'+q.id+'</div><span class="q-type '+typeCls+'">'+typeLabel+'</span><div class="q-text">'+q.question+'</div></div>';
+if(q.type==='single'){
+html+='<div class="options">';
+q.options.forEach((opt,oi)=>{
+const chk=answered&&a.includes(oi)?'checked':'';
+html+='<label class="option-item"><input type="radio" name="q_'+q.id+'" value="'+oi+'" '+chk+' '+(answered?'disabled':'')+' onchange="selectSingle('+q.id+','+oi+')">'+opt+'</label>';
+});
+html+='</div>';
+if(!answered) html+='<div class="submit-row"><button class="submit-btn" onclick="submitSingle('+q.id+')">提交答案</button></div>';
+}else if(q.type==='multiple'){
+html+='<div class="options">';
+q.options.forEach((opt,oi)=>{
+const chk=answered&&a.includes(oi)?'checked':'';
+html+='<label class="option-item"><input type="checkbox" name="q_'+q.id+'" value="'+oi+'" '+chk+' '+(answered?'disabled':'')+' onchange="selectMultiple('+q.id+')">'+opt+'</label>';
+});
+html+='</div>';
+if(!answered) html+='<div class="submit-row"><button class="submit-btn" onclick="submitMultiple('+q.id+')">提交答案</button></div>';
+}else{
+const val=answered?a:'';
+const cls=answered?(isCorrect?'correct':'wrong'):'';
+html+='<div class="fill-input"><input type="text" id="fill_'+q.id+'" placeholder="请输入答案" value="'+val+'" '+(answered?'disabled':'')+' class="'+cls+'"></div>';
+if(!answered) html+='<div class="submit-row"><button class="submit-btn" onclick="submitFill('+q.id+')">提交答案</button></div>';
+}
+const expShow=answered?'show':'';
+const tagCls=isCorrect?'correct-tag':'wrong-tag';
+const tagText=isCorrect?'正确':'错误';
+html+='<div class="explanation '+expShow+'"><span class="tag '+tagCls+'">'+tagText+'</span>'+q.explanation+'</div>';
+html+='</div>';
+});
+area.innerHTML=html;
+updateStats();
+}
+
+function checkCorrect(q,a){
+if(q.type==='single') return a.length===1&&a[0]===q.answer[0];
+if(q.type==='multiple'){if(a.length!==q.answer.length)return false;return q.answer.every(x=>a.includes(x))}
+if(q.type==='fill') return a.trim()===q.answer;
+return false;
+}
+
+function selectSingle(qid,idx){
+answers[qid]=[idx];saveAnswers();
+}
+function submitSingle(qid){
+const boxes=document.querySelectorAll('input[name="q_'+qid+'"]');
+let val=-1;boxes.forEach(b=>{if(b.checked)val=parseInt(b.value)});
+if(val===-1){alert('请选择一个选项');return}
+answers[qid]=[val];saveAnswers();renderQuestions();
+}
+function selectMultiple(qid){
+const boxes=document.querySelectorAll('input[name="q_'+qid+'"]');
+const vals=[];boxes.forEach(b=>{if(b.checked)vals.push(parseInt(b.value))});
+answers[qid]=vals;saveAnswers();
+}
+function submitMultiple(qid){
+const boxes=document.querySelectorAll('input[name="q_'+qid+'"]');
+const vals=[];boxes.forEach(b=>{if(b.checked)vals.push(parseInt(b.value))});
+if(!vals.length){alert('请至少选择一个选项');return}
+answers[qid]=vals;saveAnswers();renderQuestions();
+}
+function submitFill(qid){
+const inp=document.getElementById('fill_'+qid);
+const val=inp.value.trim();
+if(!val){alert('请输入答案');return}
+answers[qid]=val;saveAnswers();renderQuestions();
+}
+
+function updateStats(){
+const total=questions.length;
+const answeredQs=questions.filter(q=>answers[q.id]!==undefined);
+const answered=answeredQs.length;
+const correct=answeredQs.filter(q=>checkCorrect(q,answers[q.id])).length;
+const wrong=answered-correct;
+const rate=answered?Math.round(correct/answered*100)+'%':'0%';
+document.getElementById('statTotal').textContent=total;
+document.getElementById('statAnswered').textContent=answered;
+document.getElementById('statCorrect').textContent=correct;
+document.getElementById('statRate').textContent=rate;
+document.getElementById('statWrong').textContent=wrong;
+const pct=total?Math.round(answered/total*100):0;
+document.getElementById('progressText').textContent='进度: '+answered+'/'+total;
+document.getElementById('progressPercent').textContent=pct+'%';
+document.getElementById('progressFill').style.width=pct+'%';
+}
+
+function showWrongBook(){
+const wrongQs=questions.filter(q=>answers[q.id]!==undefined&&!checkCorrect(q,answers[q.id]));
+const modal=document.getElementById('wrongModal');
+const list=document.getElementById('wrongList');
+if(!wrongQs.length){list.innerHTML='<div style="text-align:center;padding:30px;color:#aaa">没有错题，继续加油！</div>';modal.classList.add('show');return}
+let html='';
+wrongQs.forEach(q=>{
+const a=answers[q.id];
+const typeLabel=q.type==='single'?'单选题':q.type==='multiple'?'多选题':'填空题';
+html+='<div class="q-card wrong">';
+html+='<div class="q-header"><div class="q-num">'+q.id+'</div><span class="q-type '+q.type+'">'+typeLabel+'</span><div class="q-text">'+q.question+'</div></div>';
+if(q.type==='fill'){
+html+='<div style="padding-left:38px;font-size:14px;margin-top:6px;">你的答案：<span style="color:#f44336">'+a+'</span> | 正确答案：<span style="color:#4caf50">'+q.answer+'</span></div>';
+}else{
+html+='<div style="padding-left:38px;font-size:14px;margin-top:6px;">你的答案：'+a.map(i=>q.options[i]).join('、')+'<br>正确答案：'+q.answer.map(i=>q.options[i]).join('、')+'</div>';
+}
+html+='<div class="explanation show" style="margin-left:38px;margin-top:10px"><span class="tag wrong-tag">错误</span>'+q.explanation+'</div>';
+html+='</div>';
+});
+list.innerHTML=html;modal.classList.add('show');
+}
+function closeModal(){document.getElementById('wrongModal').classList.remove('show')}
+
+function doRestart(){
+if(!confirm('确定要清除所有答题记录吗？'))return;
+answers={};saveAnswers();renderQuestions();
+}
+
+document.querySelectorAll('.filter-btn').forEach(btn=>{
+btn.addEventListener('click',function(){
+document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+this.classList.add('active');
+currentType=this.dataset.type;renderQuestions();
+});
+});
+
+document.getElementById('wrongModal').addEventListener('click',function(e){if(e.target===this)closeModal()});
+
+loadAnswers();renderNav();renderQuestions();
+</script>
+</body>
+</html>

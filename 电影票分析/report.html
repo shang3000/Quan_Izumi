@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>电影首映影院选择 — K-means 聚类分析报告</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   0. Design Tokens
+   ============================================================ */
+:root {
+  --dark:         #1A2618;
+  --dark2:        #233022;
+  --dark3:        #2D3D24;
+  --green-mid:    #3F5035;
+  --green-acc:    #6A8A4A;
+  --green-lite:   #8BAF56;
+  --green-soft:   #DCE8CC;
+  --green-bg:     #EEF3E8;
+  --bg:           #F4F6F1;
+  --card:         #FCFDF9;
+  --text:         #1A1E18;
+  --text2:        #5A6652;
+  --text3:        #8E9C86;
+  --border:       #E2E8DD;
+  --amber:        #C8943E;
+  --amber-soft:   #FBF0E0;
+  --blue:         #4A7DB5;
+  --blue-soft:    #E4EEF8;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.07);
+  --shadow-lg: 0 8px 30px rgba(0,0,0,0.10);
+  --radius:    12px;
+  --radius-sm:  8px;
+  --sans: 'Inter', -apple-system, 'Microsoft YaHei', sans-serif;
+  --mono: 'JetBrains Mono', 'Consolas', monospace;
+  --sidebar-w: 220px;
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  min-height: 100vh;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============================================================
+   1. Sidebar — 深绿质感
+   ============================================================ */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--dark2);
+  position: fixed;
+  top: 0; left: 0;
+  height: 100vh;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  color: #fff;
+}
+.sidebar-brand {
+  padding: 24px 18px 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  margin: 0 14px;
+  flex-shrink: 0;
+}
+.sidebar-brand .logo {
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: -0.2px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #fff;
+}
+.sidebar-brand .logo-icon {
+  display: inline-flex;
+  width: 28px; height: 28px;
+  background: var(--green-lite);
+  border-radius: 6px;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+}
+.sidebar-brand .logo span { color: rgba(255,255,255,0.45); }
+.sidebar-brand .tagline {
+  font-size: 11px;
+  color: rgba(255,255,255,0.35);
+  margin-top: 4px;
+  padding-left: 38px;
+}
+.nav-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 8px;
+  list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+.nav-list::-webkit-scrollbar { width: 3px; }
+.nav-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  margin: 1px 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.5);
+  transition: all 0.18s ease;
+  user-select: none;
+}
+.nav-item:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.85); }
+.nav-item.active { background: rgba(139,175,86,0.2); color: var(--green-lite); font-weight: 600; }
+.nav-item .num {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.2);
+  width: 20px;
+  text-align: right;
+  font-feature-settings: 'tnum';
+  flex-shrink: 0;
+}
+.nav-item.active .num { color: var(--green-lite); }
+.nav-item .label { flex: 1; }
+.nav-badge {
+  background: var(--green-lite);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  letter-spacing: 0.3px;
+}
+.sidebar-footer {
+  padding: 14px 18px;
+  margin: 0 14px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  font-size: 11px;
+  color: rgba(255,255,255,0.35);
+  line-height: 1.6;
+  flex-shrink: 0;
+}
+.sidebar-footer b { color: rgba(255,255,255,0.7); font-weight: 600; }
+
+/* ============================================================
+   2. Main
+   ============================================================ */
+.main {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  padding: 0;
+  min-height: 100vh;
+}
+.section { display: none; }
+.section.active { display: block; }
+
+/* ============================================================
+   3. Cover — 全屏电影主题
+   ============================================================ */
+#cover {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  overflow: hidden;
+  background: var(--dark);
+}
+#cover::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('bg_cover.png') center/cover no-repeat;
+  opacity: 0.55;
+}
+#cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(26,38,24,0.15) 0%,
+    rgba(26,38,24,0.25) 40%,
+    rgba(26,38,24,0.7) 100%
+  );
+}
+.cover-content {
+  position: relative;
+  z-index: 2;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 60px;
+}
+.cover-top {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding-top: 80px;
+}
+.cover-left {
+  max-width: 520px;
+}
+.cover-badge {
+  display: inline-block;
+  padding: 6px 18px;
+  background: rgba(139,175,86,0.18);
+  border: 1px solid rgba(139,175,86,0.3);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--green-lite);
+  margin-bottom: 18px;
+}
+.cover-left h1 {
+  font-size: 48px;
+  font-weight: 900;
+  color: rgba(255,255,255,0.95);
+  line-height: 1.2;
+  letter-spacing: -0.5px;
+  margin-bottom: 6px;
+  text-shadow: 0 2px 20px rgba(0,0,0,0.3);
+}
+.cover-left h1 em {
+  font-style: normal;
+  color: var(--green-lite);
+  text-shadow: 0 0 30px rgba(139,175,86,0.3);
+}
+.cover-tagline {
+  font-size: 17px;
+  color: rgba(255,255,255,0.5);
+  margin-top: 12px;
+  letter-spacing: 0.5px;
+}
+.cover-tagline::after {
+  content: '';
+  display: block;
+  width: 50px;
+  height: 3px;
+  background: var(--green-lite);
+  border-radius: 2px;
+  margin-top: 14px;
+}
+.cover-bottom {
+  padding-bottom: 40px;
+}
+.cover-cards {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 14px;
+  margin-bottom: 28px;
+}
+.cover-card-item {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 20px 16px 22px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.cover-card-item:hover {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(139,175,86,0.3);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.3);
+}
+.cover-card-item .cc-num {
+  font-size: 24px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.9);
+  margin-bottom: 6px;
+  letter-spacing: -0.3px;
+}
+.cover-card-item .cc-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.75);
+  margin-bottom: 14px;
+}
+.cover-card-item .cc-icon {
+  width: 42px;
+  height: 42px;
+  margin: 0 auto;
+  background: rgba(255,255,255,0.08);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.6);
+  font-size: 18px;
+}
+.cover-card-item .cc-badge {
+  display: inline-block;
+  background: rgba(139,175,86,0.2);
+  color: var(--green-lite);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 8px;
+  margin-top: 12px;
+}
+.cover-student {
+  text-align: center;
+  font-size: 13px;
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 0.3px;
+}
+.cover-student b { color: rgba(255,255,255,0.7); font-weight: 600; }
+
+/* ============================================================
+   4. Content Sections
+   ============================================================ */
+.content-area {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 40px 60px;
+}
+.section {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.section.active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Hero */
+.hero {
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1.5px solid var(--border);
+  position: relative;
+}
+.hero::after {
+  content: '';
+  position: absolute;
+  bottom: -1.5px; left: 0;
+  width: 60px; height: 2px;
+  background: var(--green-lite);
+  border-radius: 1px;
+}
+.hero h1 {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  line-height: 1.25;
+  color: var(--text);
+}
+.hero h1 span { color: var(--dark3); }
+.hero p {
+  font-size: 13px;
+  color: var(--text2);
+  margin-top: 5px;
+  line-height: 1.8;
+}
+.hero .tags {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.hero .tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 12px;
+  background: var(--green-bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--dark3);
+}
+
+/* Section headers */
+.section-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--text);
+  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.section-title .num {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--dark3);
+  width: 24px; height: 24px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.section-desc {
+  color: var(--text2);
+  font-size: 13px;
+  margin-bottom: 20px;
+  line-height: 1.8;
+  padding-left: 34px;
+}
+
+/* Cards */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 22px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s ease;
+}
+.card:hover { box-shadow: var(--shadow-md); }
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dark);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.card-title .bar {
+  width: 3px; height: 14px;
+  border-radius: 1.5px;
+  background: var(--green-lite);
+  flex-shrink: 0;
+}
+.card-title .bar.amber { background: var(--amber); }
+.card-title .bar.blue  { background: var(--blue); }
+.card-accent { border-left: 3px solid var(--green-lite); }
+.card-accent.amber { border-left-color: var(--amber); }
+.card-accent.blue  { border-left-color: var(--blue); }
+
+/* Stats grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.stat-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 12px;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2.5px;
+  background: var(--dark3);
+}
+.stat-card:nth-child(2)::before { background: var(--green-acc); }
+.stat-card:nth-child(3)::before { background: var(--amber); }
+.stat-card:nth-child(4)::before { background: var(--blue); }
+.stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.stat-card .num {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--dark);
+  font-feature-settings: 'tnum';
+  letter-spacing: -0.5px;
+}
+.stat-card .label { font-size: 11px; color: var(--text2); margin-top: 2px; }
+
+/* Chart */
+.chart-wrap { text-align: center; }
+.chart-wrap img {
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: #fff;
+}
+.chart-caption {
+  font-size: 12px;
+  color: var(--text2);
+  margin-top: 8px;
+  line-height: 1.8;
+}
+.chart-caption b { color: var(--text); }
+.chart-caption .hl { color: var(--amber); font-weight: 600; }
+
+/* Table */
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+thead th {
+  background: var(--green-bg);
+  color: var(--text2);
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border-bottom: 1px solid var(--border);
+}
+tbody td { padding: 9px 12px; border-bottom: 1px solid var(--border); }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--green-bg); }
+
+/* Tags */
+.tag {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tag-top    { background: var(--green-soft); color: var(--dark3); }
+.tag-hot    { background: var(--amber-soft); color: #7A5A1E; }
+.tag-mid    { background: var(--blue-soft);  color: #2B6CB0; }
+.tag-normal { background: #EDF0EB;           color: var(--text2); }
+
+/* Timeline */
+.timeline { position: relative; padding-left: 24px; }
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 5px; top: 4px; bottom: 4px;
+  width: 1.5px;
+  background: var(--border);
+}
+.timeline-item { position: relative; margin-bottom: 14px; }
+.timeline-item:last-child { margin-bottom: 0; }
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -20px; top: 5px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green-lite);
+  border: 2px solid var(--card);
+}
+.timeline-item .step { font-weight: 600; font-size: 13px; color: var(--text); }
+.timeline-item .desc { color: var(--text2); font-size: 12px; margin-top: 2px; line-height: 1.7; }
+
+/* Clean stats */
+.clean-stats { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+.clean-stat { text-align: center; min-width: 60px; }
+.clean-stat .big {
+  font-size: 30px;
+  font-weight: 700;
+  font-feature-settings: 'tnum';
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+}
+.clean-stat .big.green { color: var(--green-acc); }
+.clean-stat .big.amber { color: var(--amber); }
+.clean-stat .big.dark  { color: var(--text); }
+.clean-stat .sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.progress-block { min-width: 160px; }
+.progress-block .label { font-size: 11px; color: var(--text2); margin-bottom: 3px; }
+.progress-track { height: 5px; background: var(--border); border-radius: 2.5px; overflow: hidden; }
+.progress-fill {
+  height: 100%;
+  border-radius: 2.5px;
+  background: linear-gradient(90deg, var(--green-acc), var(--green-lite));
+  transition: width 1s ease;
+}
+.progress-block .note { font-size: 10px; color: var(--text3); margin-top: 2px; }
+
+/* Spotlight */
+.spotlight {
+  background: linear-gradient(135deg, var(--dark) 0%, var(--dark2) 100%);
+  border-radius: var(--radius);
+  padding: 22px 26px;
+  margin-bottom: 12px;
+  color: rgba(255,255,255,0.85);
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+}
+.spotlight::before {
+  content: '';
+  position: absolute;
+  top: -40px; right: -40px;
+  width: 200px; height: 200px;
+  background: radial-gradient(circle, rgba(139,175,86,0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+.spotlight .sl { font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--green-lite); margin-bottom: 2px; }
+.spotlight .sn { font-size: 26px; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
+.spotlight .sn span { color: var(--green-lite); }
+.spotlight .ss { display: flex; gap: 20px; margin-top: 12px; }
+.spotlight .ss .sv { font-size: 14px; font-weight: 700; color: #fff; }
+.spotlight .ss .slb { font-size: 10px; color: rgba(255,255,255,0.35); margin-top: 1px; }
+
+/* Report body */
+.report-body { font-size: 13px; line-height: 2; color: var(--text); }
+.report-body code {
+  background: var(--green-soft);
+  color: var(--dark3);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.report-body b { font-weight: 600; }
+.report-body .rh { font-weight: 600; font-size: 14px; color: var(--text); margin-bottom: 4px; display: block; }
+
+/* Code block */
+.code-block {
+  background: #1A1E18;
+  color: #D4D4D4;
+  padding: 14px 18px;
+  border-radius: var(--radius-sm);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.8;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  tab-size: 4;
+}
+.code-block .comment { color: #6A9955; }
+.code-block .keyword { color: #569CD6; }
+.code-block .string  { color: #CE9178; }
+.code-block .func    { color: #DCDCAA; }
+
+/* ============================================================
+   5. Animations
+   ============================================================ */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.stagger { animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.10s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.20s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.30s; }
+.stagger-7 { animation-delay: 0.35s; }
+.stagger-8 { animation-delay: 0.40s; }
+.fadein { animation: fadeIn 0.35s ease backwards; }
+.fadein-1 { animation-delay: 0.08s; }
+.fadein-2 { animation-delay: 0.15s; }
+.fadein-3 { animation-delay: 0.22s; }
+.fadein-4 { animation-delay: 0.29s; }
+
+.cover-left { animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards; animation-delay: 0.15s; }
+.cover-tagline { animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards; animation-delay: 0.25s; }
+.cover-bottom { animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards; animation-delay: 0.3s; }
+
+/* ============================================================
+   6. Scrollbar
+   ============================================================ */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+/* ============================================================
+   7. Responsive
+   ============================================================ */
+@media (max-width: 900px) {
+  :root { --sidebar-w: 52px; }
+  .sidebar-brand .logo span, .sidebar-brand .tagline, .nav-item .num, .nav-item .label, .nav-badge, .sidebar-footer { display: none; }
+  .sidebar-brand { padding: 12px 8px; display: flex; justify-content: center; margin: 0 6px; }
+  .sidebar-brand .logo { justify-content: center; }
+  .nav-item { padding: 9px; justify-content: center; }
+  .content-area { padding: 20px 16px 40px; }
+  .main { margin-left: 52px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .spotlight .ss { flex-wrap: wrap; gap: 12px; }
+  .hero h1 { font-size: 20px; }
+  .section-desc { padding-left: 0; }
+  .cover-content { padding: 0 24px; }
+  .cover-left h1 { font-size: 34px; }
+  .cover-cards { grid-template-columns: repeat(4, 1fr); gap: 10px; }
+}
+@media (max-width: 600px) {
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .clean-stats { gap: 12px; }
+  .card { padding: 14px 16px; }
+  .content-area { padding: 14px 10px 30px; }
+  .spotlight { padding: 16px 18px; }
+  .spotlight .sn { font-size: 20px; }
+  .hero h1 { font-size: 18px; }
+  .cover-content { padding: 0 14px; }
+  .cover-left h1 { font-size: 26px; }
+  .cover-cards { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .cover-card-item { padding: 14px 10px 16px; }
+  .cover-card-item .cc-num { font-size: 18px; }
+  .cover-card-item .cc-label { font-size: 11px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ======== Sidebar ======== -->
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <div class="logo">
+      <span class="logo-icon">CD</span>
+      <span>CINE<span>DATA</span></span>
+    </div>
+    <div class="tagline">首映影院 · 聚类分析</div>
+  </div>
+  <ul class="nav-list">
+    <li class="nav-item active" onclick="showSection('cover')">
+      <span class="num">✦</span>
+      <span class="label">封面</span>
+    </li>
+    <li class="nav-item" onclick="showSection('overview')">
+      <span class="num">01</span>
+      <span class="label">数据概览</span>
+    </li>
+    <li class="nav-item" onclick="showSection('clean')">
+      <span class="num">02</span>
+      <span class="label">数据清洗</span>
+    </li>
+    <li class="nav-item" onclick="showSection('eda')">
+      <span class="num">03</span>
+      <span class="label">探索分析</span>
+    </li>
+    <li class="nav-item" onclick="showSection('cluster')">
+      <span class="num">04</span>
+      <span class="label">K-means 聚类</span>
+    </li>
+    <li class="nav-item" onclick="showSection('result')">
+      <span class="num">05</span>
+      <span class="label">推荐结果</span>
+      <span class="nav-badge">TOP10</span>
+    </li>
+    <li class="nav-item" onclick="showSection('code')">
+      <span class="num">06</span>
+      <span class="label">核心代码</span>
+    </li>
+    <li class="nav-item" onclick="showSection('report')">
+      <span class="num">07</span>
+      <span class="label">分析报告</span>
+    </li>
+  </ul>
+  <div class="sidebar-footer">
+    商航 · 2406180229<br>
+    大数据管理与应用
+  </div>
+</nav>
+
+<!-- ======== Main ======== -->
+<div class="main">
+
+  <!-- ===== 封面 (cover) ===== -->
+  <div id="cover" class="section active">
+    <div class="cover-content">
+      <div class="cover-top">
+        <div class="cover-left">
+          <div class="cover-badge">K-MEANS 聚类分析</div>
+          <h1>电影首映影院<br><em>选择分析报告</em></h1>
+          <div class="cover-tagline">数据驱动决策 · 聚类洞察价值</div>
+        </div>
+      </div>
+      <div class="cover-bottom">
+        <div class="cover-cards">
+          <div class="cover-card-item stagger stagger-1" onclick="showSection('overview')">
+            <div class="cc-num">01</div>
+            <div class="cc-label">数据概览</div>
+            <div class="cc-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+          </div>
+          <div class="cover-card-item stagger stagger-2" onclick="showSection('clean')">
+            <div class="cc-num">02</div>
+            <div class="cc-label">数据清洗</div>
+            <div class="cc-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+          </div>
+          <div class="cover-card-item stagger stagger-3" onclick="showSection('eda')">
+            <div class="cc-num">03</div>
+            <div class="cc-label">探索分析</div>
+            <div class="cc-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="12" width="4" height="8"/><rect x="10" y="8" width="4" height="12"/><rect x="17" y="4" width="4" height="16"/></svg></div>
+          </div>
+          <div class="cover-card-item stagger stagger-4" onclick="showSection('cluster')">
+            <div class="cc-num">04</div>
+            <div class="cc-label">K-means 聚类</div>
+            <div class="cc-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="8" r="3"/><circle cx="17" cy="8" r="3"/><circle cx="12" cy="17" r="3"/><line x1="9" y1="10.5" x2="10.5" y2="14.5"/><line x1="15" y1="10.5" x2="13.5" y2="14.5"/></svg></div>
+          </div>
+          <div class="cover-card-item stagger stagger-5" onclick="showSection('result')">
+            <div class="cc-num">05</div>
+            <div class="cc-label">推荐结果</div>
+            <div class="cc-badge">TOP10</div>
+            <div class="cc-icon" style="margin-top:12px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div>
+          </div>
+          <div class="cover-card-item stagger stagger-6" onclick="showSection('code')">
+            <div class="cc-num">06</div>
+            <div class="cc-label">核心代码</div>
+            <div class="cc-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></div>
+          </div>
+          <div class="cover-card-item stagger stagger-7" onclick="showSection('report')">
+            <div class="cc-num">07</div>
+            <div class="cc-label">分析报告</div>
+            <div class="cc-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+          </div>
+        </div>
+        <div class="cover-student">
+          学号：<b>2406180229</b> ｜ 大数据管理与应用
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- All content sections wrapped in content-area -->
+  <div class="content-area">
+
+  <!-- 01. 数据概览 -->
+  <div id="overview" class="section">
+    <div class="hero">
+      <h1>电影首映影院<br><span>选择分析报告</span></h1>
+      <p>基于 7,521 条电影票销售数据，使用 K-means 聚类算法对 239 家影院进行自动分群，为电影首映活动推荐最佳选址。</p>
+      <div class="tags">
+        <span class="tag">✦ 239 家影院</span>
+        <span class="tag">✦ 48 部电影</span>
+        <span class="tag">✦ K=4 聚类</span>
+        <span class="tag">✦ K-means</span>
+      </div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card stagger stagger-1">
+        <div class="num">7,521</div>
+        <div class="label">场次记录</div>
+      </div>
+      <div class="stat-card stagger stagger-2">
+        <div class="num">239</div>
+        <div class="label">影院数量</div>
+      </div>
+      <div class="stat-card stagger stagger-3">
+        <div class="num">48</div>
+        <div class="label">电影种类</div>
+      </div>
+      <div class="stat-card stagger stagger-4">
+        <div class="num">11</div>
+        <div class="label">字段数</div>
+      </div>
+    </div>
+    <div class="card stagger stagger-5">
+      <div class="card-title"><span class="bar"></span>字段说明</div>
+      <div class="table-wrap fadein fadein-1">
+        <table>
+          <thead><tr><th>字段</th><th>含义</th><th>类型</th><th>示例</th></tr></thead>
+          <tbody>
+            <tr><td>film_code</td><td>电影编码</td><td>整数</td><td>1492</td></tr>
+            <tr><td>cinema_code</td><td>影院编码</td><td>整数</td><td>352</td></tr>
+            <tr><td>total_sales</td><td>总销售额（元）</td><td>整数</td><td>13,950,000</td></tr>
+            <tr><td>tickets_sold</td><td>售出票数</td><td>整数</td><td>93</td></tr>
+            <tr><td>tickets_out</td><td>退票数</td><td>整数</td><td>0</td></tr>
+            <tr><td>show_time</td><td>场次时间编码</td><td>整数</td><td>5</td></tr>
+            <tr><td>occu_perc</td><td>上座率（%）</td><td>浮点数</td><td>10.57</td></tr>
+            <tr><td>ticket_price</td><td>票价（元）</td><td>浮点数</td><td>150,000</td></tr>
+            <tr><td>ticket_use</td><td>实际使用票数</td><td>整数</td><td>93</td></tr>
+            <tr><td>capacity</td><td>座位容量</td><td>浮点数</td><td>879.85</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card stagger stagger-6">
+      <div class="card-title"><span class="bar"></span>数据分布摘要</div>
+      <div class="table-wrap fadein fadein-2">
+        <table>
+          <thead><tr><th>统计量</th><th>总票房</th><th>售票数</th><th>上座率</th><th>票价</th><th>座位容量</th></tr></thead>
+          <tbody>
+            <tr><td>均值</td><td>1,268 万</td><td>144</td><td>20.3%</td><td>8.1 万</td><td>859</td></tr>
+            <tr><td>中位数</td><td>372 万</td><td>52</td><td>10.6%</td><td>7.9 万</td><td>520</td></tr>
+            <tr><td>最大值</td><td>1.17 亿</td><td>7,889</td><td>109%</td><td>15.2 万</td><td>8,945</td></tr>
+            <tr><td>最小值</td><td>4 万</td><td>1</td><td>0%</td><td>0.25 万</td><td>-2</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 02. 数据清洗 -->
+  <div id="clean" class="section">
+    <div class="section-title"><span class="num">02</span>数据清洗</div>
+    <div class="section-desc">原始数据中的少量异常值需要在聚类之前先行修复或剔除，保证模型输入质量。</div>
+    <div class="card stagger stagger-1">
+      <div class="card-title"><span class="bar"></span>清洗规则</div>
+      <div class="timeline">
+        <div class="timeline-item fadein fadein-1">
+          <div class="step">规则一：过滤负值容量</div>
+          <div class="desc">capacity &lt; 0 的记录（3 条）—— 座位数不可能为负，属于数据录入错误。</div>
+        </div>
+        <div class="timeline-item fadein fadein-2">
+          <div class="step">规则二：过滤负值使用票数</div>
+          <div class="desc">ticket_use &lt; 0 的记录（4 条）—— 使用票数不可能为负。</div>
+        </div>
+        <div class="timeline-item fadein fadein-3">
+          <div class="step">规则三：过滤上座率异常</div>
+          <div class="desc">occu_perc &gt; 100% 的记录（7 条）—— 上座率不可能超过 100%。</div>
+        </div>
+      </div>
+    </div>
+    <div class="card stagger stagger-2">
+      <div class="card-title"><span class="bar"></span>清洗结果</div>
+      <div class="clean-stats">
+        <div class="clean-stat fadein fadein-1">
+          <div class="big amber">14</div>
+          <div class="sub">移除异常值</div>
+        </div>
+        <div class="clean-stat fadein fadein-2">
+          <div class="big green">7,507</div>
+          <div class="sub">有效记录</div>
+        </div>
+        <div class="clean-stat fadein fadein-3">
+          <div class="big dark">239</div>
+          <div class="sub">有效影院</div>
+        </div>
+        <div class="progress-block fadein fadein-4">
+          <div class="label">清洗保留率</div>
+          <div class="progress-track">
+            <div class="progress-fill" style="width:99.8%"></div>
+          </div>
+          <div class="note">99.8% 原始数据保留</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 03. 探索分析 -->
+  <div id="eda" class="section">
+    <div class="section-title"><span class="num">03</span>探索性数据分析</div>
+    <div class="section-desc">通过可视化了解影院票房分布特征，以及上座率与票价之间的关系。</div>
+    <div class="card stagger stagger-1">
+      <div class="card-title"><span class="bar"></span>影院票房与上座率分布</div>
+      <div class="chart-wrap fadein fadein-1">
+        <img src="images/01_sales_dist.png" alt="票房与上座率分布">
+      </div>
+      <div class="chart-caption"><b>发现：</b>票房分布严重右偏——少数头部影院贡献了极高票房，大部分影院票房集中在较低区间。</div>
+    </div>
+    <div class="card stagger stagger-2">
+      <div class="card-title"><span class="bar"></span>上座率 × 票价（气泡大小 = 总票房）</div>
+      <div class="chart-wrap fadein fadein-1">
+        <img src="images/02_occu_vs_price.png" alt="上座率 vs 票价">
+      </div>
+      <div class="chart-caption">
+        <b>发现：</b>高票房影院（大气泡）倾向高票价与高上座率的组合。<br>
+        <span class="hl">★ 金色星号标记了学生数据点（商航 · 2406180229）</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 04. K-means -->
+  <div id="cluster" class="section">
+    <div class="section-title"><span class="num">04</span>K-means 聚类分析</div>
+    <div class="section-desc">使用 K-means 算法对 239 家影院进行自动分群，发现不同影院群体的特征差异。</div>
+    <div class="card stagger stagger-1">
+      <div class="card-title"><span class="bar"></span>特征工程</div>
+      <p style="font-size:13px;line-height:2;">
+        选取 <b>7 个核心特征</b> 进行聚类：<br>
+        <b style="color:var(--dark3);">总票房</b>、<b style="color:var(--dark3);">总售票数</b>、<b style="color:var(--dark3);">平均上座率</b>、<b style="color:var(--dark3);">平均票价</b>、<b style="color:var(--dark3);">平均座位容量</b>、<b style="color:var(--dark3);">场次数</b>、<b style="color:var(--dark3);">电影种类数</b><br>
+        使用 <b>StandardScaler</b> 标准化。
+      </p>
+    </div>
+    <div class="card stagger stagger-2">
+      <div class="card-title"><span class="bar"></span>肘部法确定最优 K</div>
+      <div class="chart-wrap fadein fadein-1">
+        <img src="images/03_elbow.png" alt="肘部法">
+      </div>
+      <div class="chart-caption"><b>结论：</b>K=4 是明显拐点，选择 <b>K=4</b>。</div>
+    </div>
+    <div class="card stagger stagger-3">
+      <div class="card-title"><span class="bar"></span>PCA 降维可视化</div>
+      <div class="chart-wrap fadein fadein-1">
+        <img src="images/04_cluster_pca.png" alt="PCA 聚类图">
+      </div>
+      <div class="chart-caption">
+        <b>解读：</b>7 维特征降至 2 维后，4 个聚类簇有较好分离度。<br>
+        <span class="hl">★ 金色星号标记了学生数据点（商航 · 2406180229）</span>
+      </div>
+    </div>
+    <div class="card stagger stagger-4">
+      <div class="card-title"><span class="bar"></span>各簇特征对比</div>
+      <div class="chart-wrap fadein fadein-1">
+        <img src="images/05_cluster_compare.png" alt="簇特征对比">
+      </div>
+    </div>
+    <div class="card stagger stagger-5">
+      <div class="card-title"><span class="bar"></span>聚类结果汇总</div>
+      <div class="table-wrap fadein fadein-1">
+        <table>
+          <thead><tr><th>类型</th><th>数量</th><th>平均总票房</th><th>平均上座率</th><th>平均票价</th><th>平均场次</th><th>特征</th></tr></thead>
+          <tbody>
+            <tr><td><span class="tag tag-top">顶级影院</span></td><td>5</td><td>60.10 亿</td><td>38.0%</td><td>11.9 万</td><td>129</td><td>票房产出极高</td></tr>
+            <tr><td><span class="tag tag-hot">热门影院</span></td><td>42</td><td>9.89 亿</td><td>27.9%</td><td>9.6 万</td><td>68</td><td>中坚力量</td></tr>
+            <tr><td><span class="tag tag-mid">中等影院</span></td><td>40</td><td>2.21 亿</td><td>6.6%</td><td>6.9 万</td><td>19</td><td>有提升空间</td></tr>
+            <tr><td><span class="tag tag-normal">普通影院</span></td><td>152</td><td>0.98 亿</td><td>13.4%</td><td>6.1 万</td><td>21</td><td>数量最多</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 05. 推荐结果 -->
+  <div id="result" class="section">
+    <div class="section-title"><span class="num">05</span>首映影院推荐</div>
+    <div class="section-desc">评分公式：<code style="background:var(--green-soft);padding:2px 7px;border-radius:3px;font-size:12px;">MinMax(票房)×0.3 + MinMax(上座率)×0.3 + MinMax(场次)×0.2 + MinMax(电影数)×0.2</code></div>
+    <div class="spotlight stagger stagger-1">
+      <div class="sl">✦ 首推影院</div>
+      <div class="sn">影院 <span>#448</span></div>
+      <div class="ss">
+        <div><div class="sv">0.847</div><div class="slb">综合评分</div></div>
+        <div><div class="sv">120.61 亿</div><div class="slb">总票房</div></div>
+        <div><div class="sv">38.5%</div><div class="slb">上座率</div></div>
+        <div><div class="sv">11.9 万</div><div class="slb">平均票价</div></div>
+      </div>
+    </div>
+    <div class="card stagger stagger-2">
+      <div class="card-title"><span class="bar"></span>TOP10 推荐影院排行</div>
+      <div class="chart-wrap fadein fadein-1">
+        <img src="images/06_top10_recommend.png" alt="TOP10推荐">
+      </div>
+    </div>
+    <div class="card stagger stagger-3">
+      <div class="card-title"><span class="bar"></span>推荐详情</div>
+      <div class="table-wrap fadein fadein-1">
+        <table>
+          <thead><tr><th>排名</th><th>影院</th><th>评分</th><th>总票房</th><th>上座率</th><th>票价</th><th>类型</th></tr></thead>
+          <tbody>
+            <tr style="background:var(--green-bg);font-weight:600;">
+              <td style="color:var(--dark3);">#1</td>
+              <td>#448</td><td>0.847</td><td>120.61 亿</td><td>38.5%</td><td>11.9 万</td><td><span class="tag tag-top">顶级影院</span></td>
+            </tr>
+            <tr><td>#2</td><td>#524</td><td>0.678</td><td>49.86 亿</td><td>44.1%</td><td>11.9 万</td><td><span class="tag tag-top">顶级影院</span></td></tr>
+            <tr><td>#3</td><td>#163</td><td>0.672</td><td>41.52 亿</td><td>36.5%</td><td>11.9 万</td><td><span class="tag tag-top">顶级影院</span></td></tr>
+            <tr><td>4</td><td>#304</td><td>0.651</td><td>54.75 亿</td><td>40.0%</td><td>11.9 万</td><td><span class="tag tag-top">顶级影院</span></td></tr>
+            <tr><td>5</td><td>#489</td><td>0.632</td><td>33.74 亿</td><td>30.9%</td><td>11.9 万</td><td><span class="tag tag-top">顶级影院</span></td></tr>
+            <tr><td>6</td><td>#474</td><td>0.581</td><td>7.36 亿</td><td>62.2%</td><td>9.5 万</td><td><span class="tag tag-hot">热门影院</span></td></tr>
+            <tr><td>7</td><td>#518</td><td>0.515</td><td>24.09 亿</td><td>28.1%</td><td>9.5 万</td><td><span class="tag tag-hot">热门影院</span></td></tr>
+            <tr><td>8</td><td>#513</td><td>0.485</td><td>18.07 亿</td><td>34.4%</td><td>9.5 万</td><td><span class="tag tag-hot">热门影院</span></td></tr>
+            <tr><td>9</td><td>#529</td><td>0.483</td><td>10.53 亿</td><td>31.1%</td><td>9.5 万</td><td><span class="tag tag-hot">热门影院</span></td></tr>
+            <tr><td>10</td><td>#210</td><td>0.463</td><td>12.13 亿</td><td>35.2%</td><td>9.5 万</td><td><span class="tag tag-hot">热门影院</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card card-accent amber stagger stagger-4">
+      <div class="card-title"><span class="bar amber"></span>结论与建议</div>
+      <p style="font-size:13px;line-height:2.1;">
+        <b>首映影院推荐：</b><span style="color:var(--dark3);font-weight:700;font-size:16px;">影院 #448</span><br><br>
+        <b>推荐理由：</b><br>
+        ① 综合评分 <b>0.847</b>，遥遥领先<br>
+        ② 总票房 <b>120.61 亿</b>，是第二名的 2.4 倍<br>
+        ③ 上座率 <b>38.5%</b>，观众基础扎实<br><br>
+        <b>备选：</b>影院 #524（上座率 44.1%）、#304（票房 54.75 亿）
+      </p>
+    </div>
+  </div>
+
+  <!-- 06. 核心代码 -->
+  <div id="code" class="section">
+    <div class="section-title"><span class="num">06</span>核心代码</div>
+    <div class="section-desc">分析全流程的关键 Python 代码段。</div>
+    <div class="card stagger stagger-1">
+      <div class="card-title"><span class="bar"></span>数据清洗与聚合</div>
+      <div class="code-block fadein fadein-1"><span class="comment"># 数据清洗</span>
+df = df[df[<span class="string">'capacity'</span>] >= <span class="keyword">0</span>]
+df = df[df[<span class="string">'ticket_use'</span>] >= <span class="keyword">0</span>]
+df = df[df[<span class="string">'occu_perc'</span>] <= <span class="keyword">100</span>]
+
+<span class="comment"># 按影院聚合</span>
+cinema_df = df.<span class="func">groupby</span>(<span class="string">'cinema_code'</span>).<span class="func">agg</span>(
+    total_sales=(<span class="string">'total_sales'</span>, <span class="string">'sum'</span>),
+    tickets_sold=(<span class="string">'tickets_sold'</span>, <span class="string">'sum'</span>),
+    avg_occu=(<span class="string">'occu_perc'</span>, <span class="string">'mean'</span>),
+    avg_price=(<span class="string">'ticket_price'</span>, <span class="string">'mean'</span>),
+    avg_capacity=(<span class="string">'capacity'</span>, <span class="string">'mean'</span>),
+    show_count=(<span class="string">'film_code'</span>, <span class="string">'count'</span>),
+    film_count=(<span class="string">'film_code'</span>, <span class="string">'nunique'</span>)
+).<span class="func">reset_index</span>()</div>
+    </div>
+    <div class="card stagger stagger-2">
+      <div class="card-title"><span class="bar"></span>K-means 聚类</div>
+      <div class="code-block fadein fadein-1"><span class="keyword">from</span> sklearn.preprocessing <span class="keyword">import</span> StandardScaler
+<span class="keyword">from</span> sklearn.cluster <span class="keyword">import</span> KMeans
+
+features = [<span class="string">'total_sales'</span>, <span class="string">'tickets_sold'</span>, <span class="string">'avg_occu'</span>,
+            <span class="string">'avg_price'</span>, <span class="string">'avg_capacity'</span>, <span class="string">'show_count'</span>, <span class="string">'film_count'</span>]
+scaler = StandardScaler()
+X_scaled = scaler.<span class="func">fit_transform</span>(cinema_df[features])
+
+inertias = []
+<span class="keyword">for</span> k <span class="keyword">in</span> <span class="func">range</span>(<span class="keyword">2</span>, <span class="keyword">11</span>):
+    km = KMeans(n_clusters=k, random_state=<span class="keyword">42</span>)
+    km.<span class="func">fit</span>(X_scaled)
+    inertias.<span class="func">append</span>(km.inertia_)
+
+kmeans = KMeans(n_clusters=<span class="keyword">4</span>, random_state=<span class="keyword">42</span>)
+cinema_df[<span class="string">'cluster'</span>] = kmeans.<span class="func">fit_predict</span>(X_scaled)</div>
+    </div>
+    <div class="card stagger stagger-3">
+      <div class="card-title"><span class="bar"></span>综合评分与推荐</div>
+      <div class="code-block fadein fadein-1"><span class="keyword">from</span> sklearn.preprocessing <span class="keyword">import</span> MinMaxScaler
+
+mm = MinMaxScaler()
+score_cols = [<span class="string">'total_sales'</span>, <span class="string">'avg_occu'</span>, <span class="string">'show_count'</span>, <span class="string">'film_count'</span>]
+score_data = mm.<span class="func">fit_transform</span>(cinema_df[score_cols])
+weights = [<span class="keyword">0.3</span>, <span class="keyword">0.3</span>, <span class="keyword">0.2</span>, <span class="keyword">0.2</span>]
+cinema_df[<span class="string">'score'</span>] = score_data @ weights
+
+top10 = cinema_df.<span class="func">nlargest</span>(<span class="keyword">10</span>, <span class="string">'score'</span>)
+<span class="func">print</span>(top10[[<span class="string">'cinema_code'</span>, <span class="string">'score'</span>, <span class="string">'cluster_name'</span>]])</div>
+    </div>
+  </div>
+
+  <!-- 07. 分析报告 -->
+  <div id="report" class="section">
+    <div class="section-title"><span class="num">07</span>分析报告</div>
+    <div class="section-desc">代码编写过程中遇到的问题、模型选择原因、结果分析与学生数据标识。</div>
+    <div class="card stagger stagger-1">
+      <div class="card-title"><span class="bar blue"></span>一、遇到的问题与解决</div>
+      <div class="report-body">
+        <b>1. 中文编码问题</b><br>
+        Windows 下 Python 输出中文出现乱码。解决：脚本开头添加 <code>sys.stdout.reconfigure(encoding='utf-8')</code>，设置 matplotlib 中文字体为 SimHei。<br><br>
+        <b>2. 数据异常值</b><br>
+        原始数据中存在 capacity 为负数（3 条）、ticket_use 为负数（4 条）、上座率超过 100%（7 条）的异常记录，通过条件过滤移除。<br><br>
+        <b>3. 特征量纲差异</b><br>
+        总票房（亿元级）和上座率（百分比级）量纲差异巨大，使用 StandardScaler 标准化解决。<br><br>
+        <b>4. 聚类数选择</b><br>
+        通过肘部法分析，K=4 处拐点明显，且业务含义清晰。
+      </div>
+    </div>
+    <div class="card stagger stagger-2">
+      <div class="card-title"><span class="bar blue"></span>二、模型选择原因</div>
+      <div class="report-body">
+        <b>选择 K-means：</b><br>
+        1. 数据量适中（239 家影院），K-means 效率高<br>
+        2. 特征分布相对集中，适合基于距离的聚类<br>
+        3. 结果易于解释<br><br>
+        <b>不选其他方法：</b><br>
+        - DBSCAN：密度差异大，难以确定 ε 参数<br>
+        - 层次聚类：计算量偏大<br>
+        - 高斯混合模型：数据不一定符合高斯分布假设
+      </div>
+    </div>
+    <div class="card stagger stagger-3">
+      <div class="card-title"><span class="bar blue"></span>三、结果分析</div>
+      <div class="report-body">
+        <b>聚类发现：</b>239 家影院分为 4 类——<br>
+        1. <b>顶级影院（5 家）</b>：仅占 2.1%，首映首选。<br>
+        2. <b>热门影院（42 家）</b>：各项指标中上，适合备选。<br>
+        3. <b>中等影院（40 家）</b>：上座率偏低（6.6%）。<br>
+        4. <b>普通影院（152 家）</b>：占 63.6%，单体贡献小。<br><br>
+        <b>首推：</b><span style="color:var(--dark3);font-weight:700;">影院 #448</span>，综合评分 0.847。
+      </div>
+    </div>
+    <div class="card card-accent stagger stagger-4">
+      <div class="card-title"><span class="bar amber"></span>四、学生数据标识</div>
+      <div class="report-body">
+        <b>学号：2406180229</b>　<b>姓名：商航</b><br><br>
+        <b>添加位置：</b><code>电影票数据_含学生信息.csv</code> 第 <b>4001 行</b>，<code>cinema_code = 2406180229</code>。<br><br>
+        <b>可视化：</b>在「上座率 vs 票价」散点图和 PCA 聚类图中，用 <span style="color:var(--amber);font-weight:700;">★ 金色星号</span>标注。
+      </div>
+    </div>
+  </div>
+
+  </div><!-- /content-area -->
+
+</div><!-- /main -->
+
+<script>
+/* ============================================================
+   Section Switching
+   ============================================================ */
+function showSection(id) {
+  document.querySelector('.section.active')?.classList.remove('active');
+  document.querySelector('.nav-item.active')?.classList.remove('active');
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => {
+    if (n.getAttribute('onclick')?.includes(id)) n.classList.add('active');
+  });
+}
+
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.setAttribute('tabindex', '0');
+  item.setAttribute('role', 'button');
+  item.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); item.click(); }
+  });
+});
+</script>
+
+</body>
+</html>
