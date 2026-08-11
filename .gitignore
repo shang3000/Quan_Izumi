@@ -38,6 +38,13 @@ _tmp_query*.py
 *.tmp
 *.bak
 
+# ==================== 敏感凭证（登录态/Cookie，切勿提交） ====================
+taobao_cookie.json
+*cookie*.json
+*.session
+.env
+.env.local
+
 # ==================== AI 工具配置 ====================
 .agents/
 .claude/
