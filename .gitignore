@@ -45,10 +45,14 @@ taobao_cookie.json
 .env
 .env.local
 
-# ==================== AI 工具配置 ====================
+# ==================== AI 工具配置（痕迹，切勿提交） ====================
 .agents/
 .claude/
 .mimocode/
+CLAUDE.md
+AGENTS.md
+CLAUDE.local.md
+AGENTS.local.md
 
 # ==================== 系统文件 ====================
 .DS_Store
