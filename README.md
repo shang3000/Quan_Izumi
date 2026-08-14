@@ -133,7 +133,7 @@ source .venv/bin/activate
 # 例如运行爬虫项目
 cd 爬虫
 pip install requests
-python manga_download.py
+python manhua_download.py
 ```
 
 > 小提示：部分脚本需要 ffmpeg（视频合并）、浏览器开发者工具抓取的 Cookie/URL 等，详见各脚本头部注释。
