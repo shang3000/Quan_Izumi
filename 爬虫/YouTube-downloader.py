@@ -1,0 +1,514 @@
+"""
+YouTube 短视频批量下载器（基于 yt-dlp）
+
+支持的输入格式：
+1. 单条视频 / Shorts 链接
+   https://www.youtube.com/watch?v=xxxx
+   https://www.youtube.com/shorts/xxxx
+   https://youtu.be/xxxx
+2. 频道的全部 Shorts
+   https://www.youtube.com/@频道名/shorts
+3. 播放列表
+   https://www.youtube.com/playlist?list=xxxx
+4. 关键字搜索（自动下载搜索结果）
+   search:猫咪搞笑 20        ← 下载前 20 条
+   search:猫咪搞笑           ← 默认下载前 10 条
+
+使用方法：
+1. 直接运行：python YouTube-downloader.py
+2. 把链接或搜索词粘贴进去，回车开始下载
+3. 单条视频链接：会先列出该视频所有可选画质（360p/480p/720p/1080p…），
+   输入编号选择后再下载；回车直接下最佳画质
+4. 频道/播放列表/搜索：批量下载，按配置区画质上限执行
+5. 视频保存到 downloads_youtube/ 目录
+6. 输入 q 退出
+
+特点：
+- 自动检测系统代理（Clash 7897/7890 等），也支持直连
+- 自动识别 Cookie：优先 cookies.txt，其次浏览器（Firefox 成功率最高）
+- 单条链接自动弹出画质选择菜单
+- 自动跳过已下载的视频（断点续传）
+- 单条失败不中断批量任务
+- 失败自动重试（yt-dlp 内置 + 外层重试）
+
+⚠️ 重要（机器人验证）：
+YouTube 会拦截无登录态的脚本请求（"Sign in to confirm you're not a bot"）。
+若启动时提示没找到 Cookie，两步解决：
+1. 浏览器装扩展「Get cookies.txt LOCALLY」，打开 youtube.com（保持登录）导出
+2. 把导出的 cookies.txt 放到本脚本同目录，重启脚本自动识别
+"""
+
+import sys
+sys.stdout.reconfigure(encoding='utf-8')
+
+import os
+import socket
+
+try:
+    import yt_dlp
+except ImportError:
+    print('未安装 yt-dlp，请先执行：')
+    print('    .venv/Scripts/python -m pip install -U yt-dlp')
+    sys.exit(1)
+
+
+# ============ 配置区 ============
+
+DOWNLOAD_DIR = 'downloads_youtube'          # 下载目录（相对本脚本）
+MAX_HEIGHT = 720                            # 批量任务（频道/列表/搜索）的画质上限（None = 不限制）
+                                            # 单条链接不受此限，会弹出画质选择菜单
+MAX_DURATION = 180                          # 批量任务只下载短于该秒数的视频（None = 不限制）
+                                            # 单条链接不受此限（既然手动指定了，就下）
+AUDIO_ONLY = False                          # True = 只下载音频（mp3）
+MAX_RETRIES = 3                             # 外层重试次数
+
+# 常见本地代理端口（Clash / v2ray 等）
+PROXY_PORTS = [7897, 7890, 7891, 10809, 1080]
+PROXY_HOST = '127.0.0.1'
+
+
+# ============ 代理检测 ============
+
+def detect_proxy():
+    """依次探测常见代理端口，返回可用的代理地址；探测不到返回 None（走直连）"""
+    for port in PROXY_PORTS:
+        try:
+            with socket.create_connection((PROXY_HOST, port), timeout=1):
+                proxy = f'http://{PROXY_HOST}:{port}'
+                print(f'[代理] 检测到本地代理：{proxy}')
+                return proxy
+        except OSError:
+            continue
+    print('[代理] 未检测到本地代理，尝试直连…')
+    return None
+
+
+def can_direct_connect():
+    """测试能否直连 YouTube"""
+    try:
+        with socket.create_connection(('www.youtube.com', 443), timeout=5):
+            return True
+    except OSError:
+        return False
+
+
+def get_proxy():
+    """决定使用哪个代理：有本地代理用代理，否则测直连"""
+    proxy = detect_proxy()
+    if proxy:
+        return proxy
+    if can_direct_connect():
+        print('[代理] 直连可用')
+        return None
+    print('[代理] ⚠️ 无代理且无法直连 YouTube，请先开启 Clash 等代理工具再运行')
+    return None
+
+
+# ============ 下载进度 ============
+
+def make_progress_hook():
+    """生成进度回调，显示下载百分比和速度"""
+    state = {}
+
+    def hook(d):
+        if d['status'] == 'downloading':
+            total = d.get('total_bytes') or d.get('total_bytes_estimate')
+            done = d.get('downloaded_bytes', 0)
+            if total:
+                pct = done / total * 100
+                speed = d.get('speed') or 0
+                speed_str = f'{speed / 1024 / 1024:.2f} MB/s' if speed else '…'
+                print(f"\r  下载中 {pct:5.1f}%  {speed_str}", end='', flush=True)
+        elif d['status'] == 'finished':
+            print('\r  下载完成，正在合并/处理…          ')
+        state['last'] = d['status']
+
+    hook.state = state
+    return hook
+
+
+# ============ 核心选项 ============
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+COOKIE_FILE = os.path.join(SCRIPT_DIR, 'cookies.txt')  # 手动导出的 Cookie 文件
+
+# YouTube 登录态 Cookie 特征（有任意一个 = 已登录）
+LOGIN_COOKIE_NAMES = {'SID', 'SAPISID', 'LOGIN_INFO'}
+
+# 客户端伪装策略：
+# - tv_embedded：能拿到完整画质列表（144p~2160p），画质选择菜单全靠它
+# - android：兜底。只发一个 360p 混合格式（YouTube 的 SABR 限制），
+#   但部分网络环境下 tv_embedded 失败时它还能用
+# ⚠️ 两者不能写进同一个 player_client 列表：android 会污染格式列表导致只剩 360p
+PRIMARY_CLIENTS = ['tv_embedded']
+FALLBACK_CLIENTS = ['android']
+
+
+def build_opts(proxy, cookie_browser=None, cookie_file=None, player_clients=None):
+    """构建 yt-dlp 选项；cookie_browser / cookie_file 用于携带登录 Cookie"""
+    if player_clients is None:
+        player_clients = PRIMARY_CLIENTS
+    fmt = ('bestaudio/best' if AUDIO_ONLY
+           else (f'bestvideo[height<={MAX_HEIGHT}]+bestaudio/best[height<={MAX_HEIGHT}]/best'
+                 if MAX_HEIGHT else 'bestvideo+bestaudio/best'))
+
+    opts = {
+        # 画质：优先限定高度的视频+音频合并，失败降级到最佳
+        'format': fmt,
+        # 文件名：标题 [视频ID].扩展名，标题截断 60 字符避免文件名过长
+        'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title).60s [%(id)s].%(ext)s'),
+        # 合并容器
+        'merge_output_format': 'mp4',
+        # 音频模式转 mp3
+        'postprocessors': ([{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}]
+                           if AUDIO_ONLY else []),
+        # 重试（网络分片级别）
+        'retries': 5,
+        'fragment_retries': 10,
+        # 批量任务中单条失败不中断
+        'ignoreerrors': True,
+        # 不下载直播流
+        'live_from_start': False,
+        # 跳过已存在文件（断点续传）
+        'overwrites': False,
+        'continuedl': True,
+        # 时长过滤：跳过超过 MAX_DURATION 秒的长视频
+        'match_filter': (yt_dlp.utils.match_filter_func(f'duration<{MAX_DURATION}')
+                         if MAX_DURATION else None),
+        # 进度显示
+        'progress_hooks': [make_progress_hook()],
+        # 代理
+        'proxy': proxy,
+        # 客户端伪装（见顶部 PRIMARY_CLIENTS / FALLBACK_CLIENTS 说明）
+        'extractor_args': {'youtube': {'player_client': list(player_clients)}},
+        # 杂项
+        'quiet': True,
+        'no_warnings': True,
+        'noprogress': True,
+    }
+    if cookie_file:
+        # 用手动导出的 cookies.txt（最稳，新版 Chrome/Edge 加密读不了时的首选）
+        opts['cookiefile'] = cookie_file
+    elif cookie_browser:
+        # 借用浏览器的 YouTube 登录 Cookie，绕过 bot 验证
+        opts['cookiesfrombrowser'] = (cookie_browser,)
+    return opts
+
+
+def _try_cookie_opts(opts):
+    """用给定 opts 实例化 yt-dlp 并检查是否有 YouTube 登录态。成功返回 True"""
+    ydl = None
+    try:
+        ydl = yt_dlp.YoutubeDL(opts)
+        names = {c.name for c in ydl.cookiejar}  # cookiejar 是惰性加载，访问时才可能抛异常
+        return bool(names & LOGIN_COOKIE_NAMES)
+    except Exception:
+        return False
+    finally:
+        if ydl is not None:
+            try:
+                ydl.close()
+            except Exception:
+                pass
+
+
+def resolve_cookies(base_opts):
+    """
+    决定 Cookie 来源，优先级：
+    1. 脚本同目录的 cookies.txt（手动导出，最稳）
+    2. 各浏览器的登录 Cookie（Firefox 成功率最高）
+    返回 (cookie_browser, cookie_file)
+    """
+    # 方案 1：cookies.txt
+    if os.path.exists(COOKIE_FILE):
+        opts = dict(base_opts)
+        opts['cookiefile'] = COOKIE_FILE
+        if _try_cookie_opts(opts):
+            print('[Cookie] 已使用 cookies.txt（含 YouTube 登录态）✓')
+            return None, COOKIE_FILE
+        print('[Cookie] ⚠️ 找到 cookies.txt 但读取失败或无登录态，已忽略')
+
+    # 方案 2：浏览器 Cookie
+    # Firefox 排最前：新版 Chrome/Edge 的加密 (app-bound encryption) 大概率读取失败
+    for browser in ('firefox', 'edge', 'chrome', 'brave'):
+        opts = dict(base_opts)
+        opts['cookiesfrombrowser'] = (browser,)
+        if _try_cookie_opts(opts):
+            print(f'[Cookie] 已启用 {browser} 浏览器的 YouTube 登录 Cookie ✓')
+            return browser, None
+
+    # 都失败：给出明确指引
+    print('[Cookie] ⚠️ 没找到可用的 YouTube 登录 Cookie')
+    print('       （新版 Chrome/Edge 加密导致无法直接读取）')
+    print('       解决方法（两步，1 分钟搞定）：')
+    print('       1. 浏览器安装扩展「Get cookies.txt LOCALLY」，打开 youtube.com 点击导出')
+    print(f'       2. 把导出的 cookies.txt 放到：{SCRIPT_DIR}')
+    print('       重启脚本会自动识别。不处理的话，部分视频会被机器人验证拦截')
+    return None, None
+
+
+def normalize_target(user_input):
+    """
+    把用户输入统一处理成 yt-dlp 能识别的目标：
+    - search:关键词 [数量] → ytsearchN:关键词
+    - 其他 URL 原样返回
+    """
+    text = user_input.strip()
+    if text.lower().startswith('search:'):
+        rest = text[7:].strip()
+        parts = rest.rsplit(None, 1)
+        if len(parts) == 2 and parts[1].isdigit():
+            keyword, count = parts[0], int(parts[1])
+        else:
+            keyword, count = rest, 10
+        return f'ytsearch{count}:{keyword}'
+    return text
+
+
+def is_single_video(target):
+    """判断目标是不是单条视频链接（而非搜索/频道/播放列表）"""
+    if target.startswith('ytsearch'):
+        return False
+    if 'list=' in target:          # 播放列表
+        return False
+    if '/@' in target or '/channel/' in target or '/c/' in target:
+        return False               # 频道页
+    return any(k in target for k in ('watch?v=', '/shorts/', 'youtu.be/'))
+
+
+def choose_quality(info):
+    """
+    列出该视频所有可选画质，让用户挑选。
+    返回 (画质描述, yt-dlp 格式字符串)；
+    用户主动放弃返回 ('quit', None)；解析不出画质返回 (None, None)
+    """
+    # 从格式列表里收集"有画面"的分辨率 → 估算大小、宽高
+    heights = {}
+    for f in info.get('formats') or []:
+        if not f.get('height') or f.get('vcodec') == 'none':
+            continue
+        h = f['height']
+        size = f.get('filesize') or f.get('filesize_approx')
+        old = heights.get(h)
+        if old is None or (size and (not old[0] or size > old[0])):
+            heights[h] = (size, f.get('width'))
+    if not heights:
+        return None, None  # 解析不出画质列表，让调用方走默认格式
+
+    sorted_h = sorted(heights)
+    print('\n🎛  请选择画质：')
+    print('   0. 最佳画质（回车默认）')
+    for i, h in enumerate(sorted_h, 1):
+        size, w = heights[h]
+        size_str = f'（约 {size / 1024 / 1024:.0f} MB）' if size else ''
+        # 竖屏视频（Shorts）按短边（宽）标注画质：1080×1920 → 1080p 竖屏
+        label = f'{min(w, h)}p 竖屏' if (w and w < h) else f'{h}p'
+        print(f'   {i}. {label}{size_str}')
+    print('   a. 仅音频 mp3   q. 放弃下载')
+
+    while True:
+        try:
+            choice = input(f'   选择 [0-{len(sorted_h)}/a/q] > ').strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 'quit', None
+        if choice in ('', '0'):
+            return '最佳画质', 'bestvideo+bestaudio/best'
+        if choice == 'a':
+            return '仅音频 mp3', 'bestaudio/best'
+        if choice == 'q':
+            return 'quit', None
+        if choice.isdigit() and 1 <= int(choice) <= len(sorted_h):
+            h = sorted_h[int(choice) - 1]
+            fmt = (f'bestvideo[height={h}]+bestaudio/best[height<={h}]/best')
+            w = heights[h][1]
+            # 竖屏按短边（宽）标注画质：1080×1920 → 1080p
+            label = f'{min(w, h)}p' if (w and w < h) else f'{h}p'
+            return label, fmt
+        print('   输入无效，请重新选择')
+
+
+def extract_with_fallback(target, opts_list, full=False):
+    """
+    依次尝试 opts_list 里的客户端配置解析目标。
+    full=True 时解析完整格式列表（单条视频选画质需要）；否则只取列表级元数据（快）。
+    返回 (info, 成功使用的opts)；全部失败抛最后一个 DownloadError
+    """
+    last_err = None
+    for o in opts_list:
+        probe = dict(o)
+        probe.pop('match_filter', None)   # 预览/选画质阶段不做时长过滤
+        if not full:
+            probe['extract_flat'] = True
+        try:
+            with yt_dlp.YoutubeDL(probe) as ydl:
+                return ydl.extract_info(target, download=False), o
+        except yt_dlp.utils.DownloadError as e:
+            last_err = e
+    raise last_err
+
+
+def report_extract_error(msg):
+    """打印解析失败的分类提示"""
+    print(f'❌ 获取视频信息失败：{msg[:200]}')
+    if 'Sign in to confirm' in msg or 'not a bot' in msg:
+        print('   → YouTube 机器人验证拦截！请先用浏览器登录 YouTube 再运行本脚本')
+        return 'abort'
+    elif 'HTTP Error 429' in msg:
+        print('   → 请求太频繁被限流，稍等几分钟再试')
+    else:
+        print('   （常见原因：代理没开 / 链接无效）')
+    return 'retry'
+
+
+def cleanup_intermediates():
+    """删除 yt-dlp 音视频合并后残留的 .fNNN 中间分片文件"""
+    import glob
+    import re
+    for path in glob.glob(os.path.join(DOWNLOAD_DIR, '*.*')):
+        if re.search(r'\.f\d+\.[a-z0-9]+$', path, re.IGNORECASE):
+            try:
+                os.remove(path)
+                print(f'  🧹 清理中间文件：{os.path.basename(path)}')
+            except OSError:
+                pass
+
+
+def run_download(target, opts, fallback_opts):
+    """
+    执行下载。
+    返回：'ok' 成功 / 'retry' 可重试的失败 / 'abort' 无需重试的失败（bot 验证等）
+    """
+    print(f'\n▶ 目标：{target}')
+    print('=' * 60)
+
+    # ---------- 分支一：单条视频 → 完整解析 + 画质选择菜单 ----------
+    if is_single_video(target):
+        try:
+            # full=True：需要完整格式列表才能列出画质菜单
+            info, used_opts = extract_with_fallback(
+                target, [opts, fallback_opts], full=True)
+        except yt_dlp.utils.DownloadError as e:
+            return report_extract_error(str(e))
+
+        if not info:
+            print('❌ 未解析到视频信息（链接可能已删除）')
+            return 'abort'
+
+        dur = info.get('duration')
+        dur_str = f'{int(dur)}s' if dur else '?'
+        print(f'  标题：{info.get("title", "?")}')
+        print(f'  时长：{dur_str}   作者：{info.get("uploader", "?")}')
+
+        quality, fmt = choose_quality(info)
+        if quality == 'quit':
+            print('↩ 已放弃，不下载')
+            return 'ok'
+        if not fmt:
+            # 解析不出画质列表（如 android 兜底客户端只有混合格式）→ 走默认格式
+            quality, fmt = '默认画质', used_opts.get('format', 'best')
+
+        final_opts = dict(used_opts)
+        final_opts['format'] = fmt
+        final_opts.pop('match_filter', None)  # 手动指定的视频不做时长过滤
+        if quality == '仅音频 mp3':
+            final_opts['postprocessors'] = [{'key': 'FFmpegExtractAudio',
+                                             'preferredcodec': 'mp3'}]
+        print(f'\n⬇ 开始下载（{quality}）…')
+        try:
+            with yt_dlp.YoutubeDL(final_opts) as ydl:
+                ydl.download([target])
+            cleanup_intermediates()
+            print('✅ 下载完成！')
+            return 'ok'
+        except yt_dlp.utils.DownloadError as e:
+            print(f'❌ 下载出错：{str(e)[:200]}')
+            return 'retry'
+
+    # ---------- 分支二：批量目标（频道/列表/搜索） → 预览 + 按上限下载 ----------
+    try:
+        info, used_opts = extract_with_fallback(
+            target, [opts, fallback_opts], full=False)
+    except yt_dlp.utils.DownloadError as e:
+        return report_extract_error(str(e))
+
+    if info and 'entries' in info:
+        entries = [e for e in info['entries'] if e]
+        n_will_skip = sum(1 for e in entries
+                          if MAX_DURATION and e.get('duration')
+                          and e['duration'] > MAX_DURATION)
+        print(f'共发现 {len(entries)} 条视频'
+              + (f'（其中 {n_will_skip} 条超时长将被跳过）' if n_will_skip else '') + '：')
+        for i, e in enumerate(entries[:10], 1):
+            dur = e.get('duration')
+            dur_str = f'{int(dur)}s' if dur else '?'
+            skip = bool(MAX_DURATION and dur and dur > MAX_DURATION)
+            print(f'  {i:>3}. [{dur_str}] {e.get("title", "?")[:50]}'
+                  + (' ⇣跳过' if skip else ''))
+        if len(entries) > 10:
+            print(f'  … 以及另外 {len(entries) - 10} 条')
+
+    # ---------- 正式下载（应用时长过滤 + 画质上限） ----------
+    try:
+        with yt_dlp.YoutubeDL(used_opts) as ydl:
+            ydl.download([target])
+        print('✅ 全部完成！')
+        return 'ok'
+    except yt_dlp.utils.DownloadError as e:
+        print(f'❌ 下载出错：{str(e)[:200]}')
+        return 'retry'
+
+
+# ============ 主循环 ============
+
+def main():
+    print('=' * 60)
+    print('   YouTube 短视频批量下载器（yt-dlp 版）')
+    print('=' * 60)
+    print(f'保存目录：{os.path.abspath(DOWNLOAD_DIR)}')
+    print(f'批量任务画质上限：{"仅音频 mp3" if AUDIO_ONLY else (f"{MAX_HEIGHT}p" if MAX_HEIGHT else "不限制")}'
+          '（单条链接会弹画质菜单自选）')
+    if MAX_DURATION:
+        print(f'时长过滤：仅下载短于 {MAX_DURATION} 秒的视频（配置区 MAX_DURATION 可改）')
+    print()
+    print('支持的输入：')
+    print('  1. 视频链接    https://www.youtube.com/shorts/xxxx')
+    print('  2. 频道 Shorts  https://www.youtube.com/@频道名/shorts')
+    print('  3. 播放列表    https://www.youtube.com/playlist?list=xxxx')
+    print('  4. 关键字搜索  search:猫咪搞笑 20')
+    print('  输入 q 退出')
+    print()
+
+    proxy = get_proxy()
+    cookie_browser, cookie_file = resolve_cookies(build_opts(proxy))
+    opts = build_opts(proxy, cookie_browser, cookie_file, PRIMARY_CLIENTS)
+    fallback_opts = build_opts(proxy, cookie_browser, cookie_file, FALLBACK_CLIENTS)
+
+    while True:
+        try:
+            user_input = input('📥 请输入链接或搜索词 > ').strip()
+        except (EOFError, KeyboardInterrupt):
+            print('\n再见！')
+            break
+
+        if not user_input:
+            continue
+        if user_input.lower() in ('q', 'quit', 'exit'):
+            print('再见！')
+            break
+
+        target = normalize_target(user_input)
+        for attempt in range(1, MAX_RETRIES + 1):
+            result = run_download(target, opts, fallback_opts)
+            if result in ('ok', 'abort'):
+                break
+            if attempt < MAX_RETRIES:
+                print(f'… 第 {attempt} 次失败，重试（{attempt}/{MAX_RETRIES}）')
+            else:
+                print('❌ 重试次数用完，跳过该目标')
+
+        print('=' * 60)
+
+
+if __name__ == '__main__':
+    main()
