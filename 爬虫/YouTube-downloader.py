@@ -25,15 +25,16 @@ YouTube 短视频批量下载器（基于 yt-dlp）
 
 特点：
 - 自动检测系统代理（Clash 7897/7890 等），也支持直连
-- 自动识别 Cookie：优先 cookies.txt，其次浏览器（Firefox 成功率最高）
+- 自动识别 Cookie：优先 cookies.txt，其次浏览器（Firefox 成功率最高）；
+  没有 Cookie 一般也能下载，被机器人验证拦截时按提示导出即可
 - 单条链接自动弹出画质选择菜单
 - 自动跳过已下载的视频（断点续传）
 - 单条失败不中断批量任务
 - 失败自动重试（yt-dlp 内置 + 外层重试）
 
-⚠️ 重要（机器人验证）：
-YouTube 会拦截无登录态的脚本请求（"Sign in to confirm you're not a bot"）。
-若启动时提示没找到 Cookie，两步解决：
+⚠️ 机器人验证（"Sign in to confirm you're not a bot"）：
+这是代理出口 IP 被 YouTube 标记导致的。先换个 Clash 节点；
+还不行就导出登录 Cookie：
 1. 浏览器装扩展「Get cookies.txt LOCALLY」，打开 youtube.com（保持登录）导出
 2. 把导出的 cookies.txt 放到本脚本同目录，重启脚本自动识别
 """
@@ -51,10 +52,17 @@ except ImportError:
     print('    .venv/Scripts/python -m pip install -U yt-dlp')
     sys.exit(1)
 
+# 屏蔽 "Deprecated Feature: Support for Python version 3.10..." 提示：
+# 虚拟环境是 Python 3.10，yt-dlp 每次实例化都会提醒一遍，且该提示无视 no_warnings
+# 直接走 stderr。纯提醒、不影响功能，屏蔽之（真实 ERROR 不受影响）
+yt_dlp.YoutubeDL.deprecated_feature = lambda self, message: None
+
 
 # ============ 配置区 ============
 
-DOWNLOAD_DIR = 'downloads_youtube'          # 下载目录（相对本脚本）
+# 下载目录：锚定到脚本所在目录（不管从哪里启动，文件都存在同一处）
+DOWNLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            'downloads_youtube')
 MAX_HEIGHT = 720                            # 批量任务（频道/列表/搜索）的画质上限（None = 不限制）
                                             # 单条链接不受此限，会弹出画质选择菜单
 MAX_DURATION = 180                          # 批量任务只下载短于该秒数的视频（None = 不限制）
@@ -195,6 +203,25 @@ def build_opts(proxy, cookie_browser=None, cookie_file=None, player_clients=None
     return opts
 
 
+import contextlib
+import re
+import sys
+
+
+@contextlib.contextmanager
+def suppress_stderr():
+    """临时屏蔽 stderr（探测浏览器 Cookie 时 yt-dlp 会刷一堆无害的 ERROR）"""
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    old = os.dup(2)
+    os.dup2(devnull, 2)
+    try:
+        yield
+    finally:
+        os.dup2(old, 2)
+        os.close(old)
+        os.close(devnull)
+
+
 def _try_cookie_opts(opts):
     """用给定 opts 实例化 yt-dlp 并检查是否有 YouTube 登录态。成功返回 True"""
     ydl = None
@@ -223,27 +250,26 @@ def resolve_cookies(base_opts):
     if os.path.exists(COOKIE_FILE):
         opts = dict(base_opts)
         opts['cookiefile'] = COOKIE_FILE
-        if _try_cookie_opts(opts):
+        with suppress_stderr():
+            ok = _try_cookie_opts(opts)
+        if ok:
             print('[Cookie] 已使用 cookies.txt（含 YouTube 登录态）✓')
             return None, COOKIE_FILE
         print('[Cookie] ⚠️ 找到 cookies.txt 但读取失败或无登录态，已忽略')
 
-    # 方案 2：浏览器 Cookie
+    # 方案 2：浏览器 Cookie（静默探测，失败不刷屏）
     # Firefox 排最前：新版 Chrome/Edge 的加密 (app-bound encryption) 大概率读取失败
     for browser in ('firefox', 'edge', 'chrome', 'brave'):
         opts = dict(base_opts)
         opts['cookiesfrombrowser'] = (browser,)
-        if _try_cookie_opts(opts):
+        with suppress_stderr():
+            ok = _try_cookie_opts(opts)
+        if ok:
             print(f'[Cookie] 已启用 {browser} 浏览器的 YouTube 登录 Cookie ✓')
             return browser, None
 
-    # 都失败：给出明确指引
-    print('[Cookie] ⚠️ 没找到可用的 YouTube 登录 Cookie')
-    print('       （新版 Chrome/Edge 加密导致无法直接读取）')
-    print('       解决方法（两步，1 分钟搞定）：')
-    print('       1. 浏览器安装扩展「Get cookies.txt LOCALLY」，打开 youtube.com 点击导出')
-    print(f'       2. 把导出的 cookies.txt 放到：{SCRIPT_DIR}')
-    print('       重启脚本会自动识别。不处理的话，部分视频会被机器人验证拦截')
+    # 都没有：不打扰用户 —— 无 Cookie 大多数情况也能下载，被拦截了再说
+    print('[Cookie] 未携带登录 Cookie（一般不影响，被机器人验证拦截时再导出）')
     return None, None
 
 
@@ -352,7 +378,10 @@ def report_extract_error(msg):
     """打印解析失败的分类提示"""
     print(f'❌ 获取视频信息失败：{msg[:200]}')
     if 'Sign in to confirm' in msg or 'not a bot' in msg:
-        print('   → YouTube 机器人验证拦截！请先用浏览器登录 YouTube 再运行本脚本')
+        print('   → YouTube 机器人验证拦截（当前节点 IP 被标记）！')
+        print('     解决：① 先换个 Clash 节点再试；② 或导出登录 Cookie：')
+        print('        浏览器装扩展「Get cookies.txt LOCALLY」→ 打开 youtube.com（保持登录）')
+        print(f'        → 点导出 → 把 cookies.txt 放到 {SCRIPT_DIR} → 重启脚本')
         return 'abort'
     elif 'HTTP Error 429' in msg:
         print('   → 请求太频繁被限流，稍等几分钟再试')
@@ -364,14 +393,32 @@ def report_extract_error(msg):
 def cleanup_intermediates():
     """删除 yt-dlp 音视频合并后残留的 .fNNN 中间分片文件"""
     import glob
-    import re
-    for path in glob.glob(os.path.join(DOWNLOAD_DIR, '*.*')):
-        if re.search(r'\.f\d+\.[a-z0-9]+$', path, re.IGNORECASE):
+    import time
+    for _ in range(3):                      # 合并刚结束时文件可能还被占用，稍等重试
+        leftovers = [p for p in glob.glob(os.path.join(DOWNLOAD_DIR, '*.*'))
+                     if re.search(r'\.f\d+\.[a-z0-9]+$', p, re.IGNORECASE)]
+        if not leftovers:
+            return
+        for path in leftovers:
             try:
                 os.remove(path)
                 print(f'  🧹 清理中间文件：{os.path.basename(path)}')
             except OSError:
-                pass
+                pass                        # 被占用，等下一轮
+        time.sleep(0.5)
+
+
+def report_saved_files(video_id):
+    """按视频 ID 找到下载成品，打印完整路径，方便用户直接定位"""
+    import glob
+    # 文件名模板是 "标题 [视频ID].ext"，glob 的 [] 是特殊字符，必须转义
+    pattern = os.path.join(DOWNLOAD_DIR, '*' + glob.escape(f'[{video_id}]') + '.*')
+    saved = [p for p in glob.glob(pattern) if not re.search(r'\.f\d+\.', p)]
+    for p in saved:
+        size_mb = os.path.getsize(p) / 1024 / 1024
+        print(f'💾 已保存：{p}（{size_mb:.1f} MB）')
+    if not saved:
+        print(f'💾 文件保存在：{DOWNLOAD_DIR}')
 
 
 def run_download(target, opts, fallback_opts):
@@ -420,6 +467,7 @@ def run_download(target, opts, fallback_opts):
                 ydl.download([target])
             cleanup_intermediates()
             print('✅ 下载完成！')
+            report_saved_files(info.get('id', ''))
             return 'ok'
         except yt_dlp.utils.DownloadError as e:
             print(f'❌ 下载出错：{str(e)[:200]}')
@@ -452,7 +500,9 @@ def run_download(target, opts, fallback_opts):
     try:
         with yt_dlp.YoutubeDL(used_opts) as ydl:
             ydl.download([target])
+        cleanup_intermediates()
         print('✅ 全部完成！')
+        print(f'💾 文件保存在：{DOWNLOAD_DIR}')
         return 'ok'
     except yt_dlp.utils.DownloadError as e:
         print(f'❌ 下载出错：{str(e)[:200]}')
