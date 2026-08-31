@@ -8,18 +8,20 @@ TikTok 视频批量下载器（tikwm API + yt-dlp 双引擎）
 2. 分享短链接（自动跟随重定向到正式链接）
    https://vm.tiktok.com/xxxxxx/
    https://vt.tiktok.com/xxxxxx/
-3. 用户主页（批量下载 TA 的全部视频）
-   https://www.tiktok.com/@用户名     或直接输入   @用户名
-4. cURL 命令（从 Chrome DevTools 复制，自动提取里面的链接）
+3. 多链接批量：一次粘贴多条链接（空格/换行分隔），
+   自动逐条下载无水印版，不弹菜单
+4. 用户主页（批量）：https://www.tiktok.com/@用户名 或直接输入 @用户名
+   ⚠️ tikwm 的用户列表接口对脚本请求设防（Cloudflare），大概率不可用；
+   不可用时会提示，请改用「多链接批量」模式
+5. cURL 命令（从 Chrome DevTools 复制，自动提取里面的链接）
 
 使用方法：
 1. 直接运行：.venv/Scripts/python Tiktok-downloader.py
 2. 把链接粘贴进去，回车开始下载
 3. 单条视频：会列出可选版本（高清无水印 / 标准无水印 / 带水印 / 仅原声），
    回车默认下无水印版
-4. 用户主页：先预览视频列表，可选全部下载 / 只下前 N 条 / 翻页
-5. 视频/图片保存到 downloads_tiktok/ 目录
-6. 输入 q 退出
+4. 视频/图片保存到 downloads_tiktok/ 目录
+5. 输入 q 退出
 
 双引擎说明：
 - 主引擎 tikwm.com 公共 API：稳定、自带无水印直链，缺点是第三方服务
@@ -30,9 +32,8 @@ TikTok 视频批量下载器（tikwm API + yt-dlp 双引擎）
 ⚠️ 常见报错：
 - tikwm 一直失败 → 第三方服务可能在抽风 / 你的 IP 被 TikTok 风控盯上，
   换个 Clash 节点再试
-- 拉主页拿到 0 条 → 未登录被 TikTok 限流。浏览器登录 TikTok 后：
-  1. 装扩展「Get cookies.txt LOCALLY」，打开 tiktok.com（保持登录）导出
-  2. 重命名为 cookies_tiktok.txt 放到本脚本同目录，重启脚本
+- 拉主页拿到 403 → tikwm 用户列表接口被 Cloudflare 拦（已知限制），
+  用「多链接批量」模式代替
 """
 
 import sys
@@ -215,8 +216,9 @@ def resolve_short_url(url, proxies):
 
 # ============ 单视频流程 ============
 
-def run_single_tikwm(target, proxies):
-    """tikwm 引擎处理单条视频。返回 'ok' / 'retry' / 'abort'"""
+def run_single_tikwm(target, proxies, auto=False):
+    """tikwm 引擎处理单条视频。auto=True 跳过菜单直接下标准无水印。
+    返回 'ok' / 'retry' / 'abort'"""
     try:
         info = tikwm_video_info(target, proxies)
     except RuntimeError as e:
@@ -235,12 +237,15 @@ def run_single_tikwm(target, proxies):
     # ---- 图集：images 非空 ----
     images = info.get('images') or []
     if images:
-        print(f'\n🖼  这是图集，共 {len(images)} 张图片')
-        try:
-            choice = input('   回车下载全部图片，q 放弃 > ').strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            return 'ok'
+        if auto:
+            choice = ''
+        else:
+            print(f'\n🖼  这是图集，共 {len(images)} 张图片')
+            try:
+                choice = input('   回车下载全部图片，q 放弃 > ').strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return 'ok'
         if choice == 'q':
             print('↩ 已放弃')
             return 'ok'
@@ -264,6 +269,14 @@ def run_single_tikwm(target, proxies):
     play_url = fix_url(info.get('play'))
     wm_url = fix_url(info.get('wmplay'))
     music_url = fix_url(info.get('music'))
+
+    if auto:   # 批量模式：不弹菜单，直接标准无水印
+        if not os.path.exists(build_filename(title, vid, 'mp4')):
+            print(f'⬇ 下载（标准无水印）…')
+            path = build_filename(title, vid, 'mp4')
+            return 'ok' if download_file(play_url, path, proxies) else 'retry'
+        print('  ⇣ 已存在，跳过')
+        return 'ok'
 
     def mb(v):
         return f'（约 {v / 1024 / 1024:.1f} MB）' if v else ''
@@ -327,7 +340,11 @@ def run_user_page_tikwm(unique_id, proxies):
                          proxies)
     except RuntimeError as e:
         print(f'❌ {e}')
-        return 'retry'
+        if '403' in str(e) or 'Forbidden' in str(e):
+            print('   → tikwm 的用户列表接口被 Cloudflare 拦截（对纯脚本请求设防）')
+            print('     变通方案：在 TikTok 网页版打开该用户主页，把想下的视频链接')
+            print('     复制出来，多条一起粘贴到本脚本 → 自动进入多链接批量模式')
+        return 'abort'
     videos = data.get('videos') or []
     if not videos:
         print('❌ 一条视频都没拿到（用户不存在 / 未登录被限流 / 该用户无私发视频）')
@@ -430,6 +447,13 @@ def run_ytdlp(target, proxies):
         print('❌ yt-dlp 未安装（备用引擎不可用）')
         return 'retry'
 
+    class _SilentLogger:
+        """吞掉 yt-dlp 的 ERROR 刷屏（真实结果看返回码）"""
+        def debug(self, msg): pass
+        def info(self, msg): pass
+        def warning(self, msg): pass
+        def error(self, msg): pass
+
     proxy = proxies['http'] if proxies else None
     opts = {
         'format': 'best[format_id!*=download_addr]/best',
@@ -443,6 +467,7 @@ def run_ytdlp(target, proxies):
         'quiet': True,
         'no_warnings': True,
         'noprogress': True,
+        'logger': _SilentLogger(),
         'proxy': proxy,
         'extractor_args': {'tiktok': {
             'api_hostname': ['api16-normal-c-useast1a.tiktokv.com'],
@@ -458,6 +483,7 @@ def run_ytdlp(target, proxies):
         if ret == 0:
             print(f'✅ 下载完成！文件保存在：{DOWNLOAD_DIR}')
             return 'ok'
+        print('❌ yt-dlp 也失败了（多为 TikTok 风控拦截，可换个 Clash 节点再试）')
         return 'retry'
     except yt_dlp.utils.DownloadError as e:
         print(f'❌ yt-dlp 也失败了：{str(e)[:150]}')
@@ -508,7 +534,7 @@ def normalize_target(user_input, proxies):
 
 # ============ 主流程 ============
 
-def run_download(kind, target, proxies):
+def run_download(kind, target, proxies, auto=False):
     """
     执行下载，双引擎策略：tikwm 失败自动切 yt-dlp。
     返回 'ok' / 'retry' / 'abort'
@@ -520,7 +546,7 @@ def run_download(kind, target, proxies):
     if kind == 'user':
         result = run_user_page_tikwm(target, proxies)
     else:
-        result = run_single_tikwm(target, proxies)
+        result = run_single_tikwm(target, proxies, auto=auto)
 
     # tikwm 失败 → yt-dlp 备用引擎
     if result == 'retry' and yt_dlp:
@@ -528,6 +554,11 @@ def run_download(kind, target, proxies):
         result = run_ytdlp(ydl_target, proxies)
 
     return result
+
+
+def extract_all_links(text):
+    """从多行输入里提取所有 TikTok 相关链接（多链接批量模式）"""
+    return re.findall(r'https?://[^\s\'"]+', text)
 
 
 def main():
@@ -543,6 +574,7 @@ def main():
     print('  2. 分享短链    https://vm.tiktok.com/xxxx/')
     print('  3. 用户主页    https://www.tiktok.com/@用户名  或  @用户名')
     print('  4. cURL 命令   （从浏览器 DevTools 复制）')
+    print('  5. 多链接批量  （一次粘贴多条链接，空格/换行分隔，直接下无水印版）')
     print('  输入 q 退出')
     print()
 
@@ -561,6 +593,29 @@ def main():
             print('再见！')
             break
 
+        # ---- 多链接批量模式：输入里含 ≥2 个 http 链接 ----
+        links = extract_all_links(user_input)
+        if len(links) >= 2:
+            print(f'\n📦 检测到 {len(links)} 条链接，进入批量模式（标准无水印）')
+            ok = fail = 0
+            for i, link in enumerate(links, 1):
+                print(f'\n[{i}/{len(links)}]', end='')
+                kind, target = normalize_target(link, proxies)
+                if kind == 'unknown':
+                    print(f' ⚠️ 非法链接，跳过：{link[:60]}')
+                    fail += 1
+                    continue
+                result = run_download(kind, target, proxies, auto=True)
+                if result == 'ok':
+                    ok += 1
+                else:
+                    fail += 1
+                time.sleep(API_INTERVAL)
+            print(f'\n{"=" * 60}\n📦 批量完成：成功 {ok}，失败 {fail}')
+            print('=' * 60)
+            continue
+
+        # ---- 单目标模式 ----
         kind, target = normalize_target(user_input, proxies)
         if kind == 'unknown':
             print('⚠️ 看不懂这个输入，请粘贴 TikTok 链接、@用户名 或 cURL 命令')
