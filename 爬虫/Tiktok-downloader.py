@@ -1,5 +1,5 @@
 """
-TikTok 视频批量下载器（基于 yt-dlp）
+TikTok 视频批量下载器（tikwm API + yt-dlp 双引擎）
 
 支持的输入格式：
 1. 单条视频链接
@@ -9,37 +9,30 @@ TikTok 视频批量下载器（基于 yt-dlp）
    https://vm.tiktok.com/xxxxxx/
    https://vt.tiktok.com/xxxxxx/
 3. 用户主页（批量下载 TA 的全部视频）
-   https://www.tiktok.com/@用户名
-4. 话题标签页（批量下载该标签下的视频）
-   https://www.tiktok.com/tag/关键词
-5. cURL 命令（从 Chrome DevTools 复制，自动提取里面的链接）
+   https://www.tiktok.com/@用户名     或直接输入   @用户名
+4. cURL 命令（从 Chrome DevTools 复制，自动提取里面的链接）
 
 使用方法：
 1. 直接运行：.venv/Scripts/python Tiktok-downloader.py
 2. 把链接粘贴进去，回车开始下载
-3. 单条视频链接：会先列出该视频所有可选画质（540p/720p/1080p…），
-   输入编号选择后再下载；回车直接下最佳画质
-4. 主页 / 话题：批量下载，按配置区画质上限执行
-5. 视频保存到 downloads_tiktok/ 目录
+3. 单条视频：会列出可选版本（高清无水印 / 标准无水印 / 带水印 / 仅原声），
+   回车默认下无水印版
+4. 用户主页：先预览视频列表，可选全部下载 / 只下前 N 条 / 翻页
+5. 视频/图片保存到 downloads_tiktok/ 目录
 6. 输入 q 退出
 
-特点：
-- 优先下载无水印版本（download_addr 是 TikTok 官方带水印的转码，
-  脚本默认避开它，选 CDN 原始流；实在没有才回退到带水印版）
-- 自动检测系统代理（Clash 7897/7890 等），也支持直连
-- 自动识别 Cookie：优先 cookies.txt，其次浏览器；
-  TikTok 不登录一般也能下，批量拉主页被限流时按提示导出即可
-- 单条链接自动弹出画质选择菜单
-- 自动跳过已下载的视频（断点续传）
-- 单条失败不中断批量任务
-- 失败自动重试
+双引擎说明：
+- 主引擎 tikwm.com 公共 API：稳定、自带无水印直链，缺点是第三方服务
+  （限频 1 次/秒，脚本已自动放慢节奏）
+- 备用引擎 yt-dlp：tikwm 挂了或没收录时自动切换
+  （yt-dlp 需要 curl_cffi 做浏览器伪装，venv 里已装好）
 
 ⚠️ 常见报错：
-- "Login required" / 拉主页只拿到 0 条 → TikTok 对未登录的批量请求限流。
-  解决：浏览器登录 TikTok 后导出 Cookie：
-  1. 浏览器装扩展「Get cookies.txt LOCALLY」，打开 tiktok.com（保持登录）导出
-  2. 把导出的 cookies.txt 放到本脚本同目录，重启脚本自动识别
-- 一直转圈不出结果 → 检查 Clash 是否开启、节点是否可用
+- tikwm 一直失败 → 第三方服务可能在抽风 / 你的 IP 被 TikTok 风控盯上，
+  换个 Clash 节点再试
+- 拉主页拿到 0 条 → 未登录被 TikTok 限流。浏览器登录 TikTok 后：
+  1. 装扩展「Get cookies.txt LOCALLY」，打开 tiktok.com（保持登录）导出
+  2. 重命名为 cookies_tiktok.txt 放到本脚本同目录，重启脚本
 """
 
 import sys
@@ -47,49 +40,56 @@ sys.stdout.reconfigure(encoding='utf-8')
 
 import os
 import re
+import json
+import time
 import socket
 
 try:
-    import yt_dlp
+    import requests
 except ImportError:
-    print('未安装 yt-dlp，请先执行：')
-    print('    .venv/Scripts/python -m pip install -U yt-dlp')
+    print('未安装 requests，请先执行：')
+    print('    .venv/Scripts/python -m pip install requests')
     sys.exit(1)
 
-# 屏蔽 "Deprecated Feature: Support for Python version 3.10..." 提示：
-# 虚拟环境是 Python 3.10，yt-dlp 每次实例化都会提醒一遍，且该提示无视 no_warnings
-# 直接走 stderr。纯提醒、不影响功能，屏蔽之（真实 ERROR 不受影响）
-yt_dlp.YoutubeDL.deprecated_feature = lambda self, message: None
+# yt-dlp 是备用引擎，缺了不影响主流程
+try:
+    import yt_dlp
+    yt_dlp.YoutubeDL.deprecated_feature = lambda self, message: None  # 屏蔽 Python 3.10 弃用提示
+except ImportError:
+    yt_dlp = None
 
 
 # ============ 配置区 ============
 
-# 下载目录：锚定到脚本所在目录（不管从哪里启动，文件都存在同一处）
-DOWNLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            'downloads_tiktok')
-MAX_HEIGHT = 1080                           # 批量任务（主页/话题）的画质上限（None = 不限制）
-                                            # 单条链接不受此限，会弹出画质选择菜单
-MAX_DURATION = None                         # 批量任务只下载短于该秒数的视频（None = 不限制）
-                                            # 单条链接不受此限（既然手动指定了，就下）
-AUDIO_ONLY = False                          # True = 只下载音频（mp3，需 ffmpeg）
-MAX_RETRIES = 3                             # 外层重试次数
-REQUEST_INTERVAL = 1                        # 批量任务每次请求间隔秒数（防限流）
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DOWNLOAD_DIR = os.path.join(SCRIPT_DIR, 'downloads_tiktok')
+COOKIE_FILE = os.path.join(SCRIPT_DIR, 'cookies_tiktok.txt')   # yt-dlp 备用引擎的 Cookie
+
+MAX_DURATION = None          # 批量任务只下载短于该秒数的视频（None = 不限制）
+MAX_RETRIES = 3              # 外层重试次数
+API_INTERVAL = 1.5           # tikwm 请求间隔秒数（免费接口限 1 次/秒，留点余量）
+BATCH_QUALITY = 'play'       # 批量任务用的画质：'hdplay'=高清无水印 'play'=标准无水印 'wmplay'=带水印
+
+UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36')
 
 # 常见本地代理端口（Clash / v2ray 等）
 PROXY_PORTS = [7897, 7890, 7891, 10809, 1080]
 PROXY_HOST = '127.0.0.1'
 
+TIKWM_BASE = 'https://www.tikwm.com/api'
+
 
 # ============ 代理检测 ============
 
 def detect_proxy():
-    """依次探测常见代理端口，返回可用的代理地址；探测不到返回 None（走直连）"""
+    """依次探测常见代理端口，返回 requests 可用的 proxies dict；探测不到返回 None（走直连）"""
     for port in PROXY_PORTS:
         try:
             with socket.create_connection((PROXY_HOST, port), timeout=1):
                 proxy = f'http://{PROXY_HOST}:{port}'
                 print(f'[代理] 检测到本地代理：{proxy}')
-                return proxy
+                return {'http': proxy, 'https': proxy}
         except OSError:
             continue
     print('[代理] 未检测到本地代理，尝试直连…')
@@ -105,11 +105,11 @@ def can_direct_connect():
         return False
 
 
-def get_proxy():
-    """决定使用哪个代理：有本地代理用代理，否则测直连"""
-    proxy = detect_proxy()
-    if proxy:
-        return proxy
+def get_proxies():
+    """决定代理配置：有本地代理用代理，否则测直连"""
+    proxies = detect_proxy()
+    if proxies:
+        return proxies
     if can_direct_connect():
         print('[代理] 直连可用')
         return None
@@ -117,167 +117,359 @@ def get_proxy():
     return None
 
 
-# ============ 下载进度 ============
+# ============ 工具函数 ============
 
-def make_progress_hook():
-    """生成进度回调，显示下载百分比和速度"""
-    state = {}
-
-    def hook(d):
-        if d['status'] == 'downloading':
-            total = d.get('total_bytes') or d.get('total_bytes_estimate')
-            done = d.get('downloaded_bytes', 0)
-            if total:
-                pct = done / total * 100
-                speed = d.get('speed') or 0
-                speed_str = f'{speed / 1024 / 1024:.2f} MB/s' if speed else '…'
-                print(f"\r  下载中 {pct:5.1f}%  {speed_str}", end='', flush=True)
-        elif d['status'] == 'finished':
-            print('\r  下载完成，正在处理…                ')
-        state['last'] = d['status']
-
-    hook.state = state
-    return hook
+def sanitize_filename(name, max_len=60):
+    """清理文件名非法字符并截断"""
+    name = re.sub(r'[\\/:*?"<>|\r\n\t]', ' ', str(name))
+    name = re.sub(r'\s+', ' ', name).strip().strip('.')
+    return name[:max_len] if name else 'untitled'
 
 
-# ============ 核心选项 ============
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-COOKIE_FILE = os.path.join(SCRIPT_DIR, 'cookies_tiktok.txt')  # 手动导出的 Cookie 文件
-
-# TikTok 登录态 Cookie 特征（有 sessionid = 已登录）
-LOGIN_COOKIE_NAMES = {'sessionid'}
-
-# TikTok 的视频是"混合流"（音视频合在一个 mp4 里，不像 YouTube 分离），
-# 所以格式语法用 best[...]，不用 bestvideo+bestaudio。
-# download_addr = TikTok 官方带水印转码流 → 默认避开；CDN 原始流（play_addr/
-# bytevc1_xxx / h264_xxx 等）没有水印 → 优先选。
-NO_WATERMARK = '[format_id!*=download_addr]'
-FMT_BEST = f'best{NO_WATERMARK}/best'
+def build_filename(title, video_id, ext):
+    """构造 '标题 [视频ID].ext' 形式的文件名"""
+    return os.path.join(DOWNLOAD_DIR,
+                        f'{sanitize_filename(title)} [{video_id}].{ext}')
 
 
-def build_opts(proxy, cookie_browser=None, cookie_file=None):
-    """构建 yt-dlp 选项；cookie_browser / cookie_file 用于携带登录 Cookie"""
-    fmt = ('bestaudio/best' if AUDIO_ONLY
-           else (f'best[height<={MAX_HEIGHT}]{NO_WATERMARK}/best[height<={MAX_HEIGHT}]/best'
-                 if MAX_HEIGHT else FMT_BEST))
+def fix_url(u):
+    """把 tikwm 返回的链接补全协议（可能是 //xxx 或 /xxx 开头）"""
+    if not u:
+        return u
+    if u.startswith('//'):
+        return 'https:' + u
+    if u.startswith('/'):
+        return 'https://www.tikwm.com' + u
+    return u
 
+
+def download_file(url, path, proxies):
+    """流式下载文件，带进度显示；成功返回 True"""
+    headers = {'User-Agent': UA, 'Referer': 'https://www.tiktok.com/'}
+    try:
+        with requests.get(url, headers=headers, proxies=proxies,
+                          timeout=60, stream=True) as r:
+            r.raise_for_status()
+            total = int(r.headers.get('content-length') or 0)
+            done = 0
+            with open(path, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=65536):
+                    f.write(chunk)
+                    done += len(chunk)
+                    if total:
+                        pct = done / total * 100
+                        print(f'\r  下载中 {pct:5.1f}%  {done / 1024 / 1024:.1f} MB',
+                              end='', flush=True)
+        print()
+        # 校验：mp4 至少要有 ftyp 头，太小说明下到了错误页
+        if os.path.getsize(path) < 10240:
+            os.remove(path)
+            print('  ⚠️ 文件异常（小于 10KB），已丢弃')
+            return False
+        size_mb = os.path.getsize(path) / 1024 / 1024
+        print(f'💾 已保存：{path}（{size_mb:.1f} MB）')
+        return True
+    except requests.RequestException as e:
+        print(f'\n  ⚠️ 下载中断：{str(e)[:120]}')
+        if os.path.exists(path):
+            os.remove(path)   # 删掉半截文件，保证重试能重来
+        return False
+
+
+# ============ tikwm 主引擎 ============
+
+def tikwm_get(path, params, proxies):
+    """请求 tikwm API，返回 data 部分；失败抛 RuntimeError"""
+    try:
+        r = requests.get(TIKWM_BASE + path, params=params,
+                         proxies=proxies, timeout=30,
+                         headers={'User-Agent': UA})
+        r.raise_for_status()
+        j = r.json()
+    except (requests.RequestException, ValueError) as e:
+        raise RuntimeError(f'tikwm 请求失败：{str(e)[:120]}')
+    if j.get('code') != 0:
+        raise RuntimeError(f'tikwm 返回错误：{str(j.get("msg"))[:120]}')
+    return j.get('data') or {}
+
+
+def tikwm_video_info(url, proxies):
+    """解析单条视频/图集信息"""
+    data = tikwm_get('/', {'url': url, 'hd': 1}, proxies)
+    if not data.get('id'):
+        raise RuntimeError('tikwm 未返回视频数据（链接可能无效或已删除）')
+    return data
+
+
+def resolve_short_url(url, proxies):
+    """把 vm.tiktok.com / vt.tiktok.com 短链解析成正式链接"""
+    if not re.search(r'(vm|vt)\.tiktok\.com/', url):
+        return url
+    try:
+        r = requests.get(url, proxies=proxies, timeout=20,
+                         headers={'User-Agent': UA}, allow_redirects=True)
+        return r.url
+    except requests.RequestException:
+        return url
+
+
+# ============ 单视频流程 ============
+
+def run_single_tikwm(target, proxies):
+    """tikwm 引擎处理单条视频。返回 'ok' / 'retry' / 'abort'"""
+    try:
+        info = tikwm_video_info(target, proxies)
+    except RuntimeError as e:
+        print(f'❌ {e}')
+        if '无效' in str(e) or '删除' in str(e):
+            return 'abort'
+        return 'retry'
+
+    vid = info.get('id', '')
+    title = info.get('title') or 'tiktok_video'
+    author = (info.get('author') or {}).get('nickname', '?')
+    dur = info.get('duration')
+    print(f'  标题：{title}')
+    print(f'  时长：{int(dur)}s   作者：{author}')
+
+    # ---- 图集：images 非空 ----
+    images = info.get('images') or []
+    if images:
+        print(f'\n🖼  这是图集，共 {len(images)} 张图片')
+        try:
+            choice = input('   回车下载全部图片，q 放弃 > ').strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 'ok'
+        if choice == 'q':
+            print('↩ 已放弃')
+            return 'ok'
+        ok = 0
+        for i, img in enumerate(images, 1):
+            img = fix_url(img)
+            path = build_filename(f'{title} #{i:02d}', vid, 'jpg')
+            if os.path.exists(path):
+                print(f'  ⇣ 第 {i} 张已存在，跳过')
+                ok += 1
+                continue
+            print(f'  ⬇ 第 {i}/{len(images)} 张…')
+            if download_file(img, path, proxies):
+                ok += 1
+            time.sleep(API_INTERVAL)
+        print(f'✅ 完成：{ok}/{len(images)} 张' if ok else '❌ 全部失败')
+        return 'ok' if ok else 'retry'
+
+    # ---- 视频：列出版本菜单 ----
+    hd_url = fix_url(info.get('hdplay'))
+    play_url = fix_url(info.get('play'))
+    wm_url = fix_url(info.get('wmplay'))
+    music_url = fix_url(info.get('music'))
+
+    def mb(v):
+        return f'（约 {v / 1024 / 1024:.1f} MB）' if v else ''
+
+    print('\n🎛  请选择版本：')
+    print(f'   0. 标准无水印（回车默认）{mb(info.get("size"))}')
+    if hd_url:
+        print(f'   1. 高清无水印 1080p{mb(info.get("hd_size"))}')
+    if wm_url:
+        print(f'   2. 带水印原版{mb(info.get("wm_size"))}')
+    print('   3. 仅原声 mp3   q. 放弃下载')
+
+    while True:
+        try:
+            choice = input('   选择 > ').strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 'ok'
+        if choice in ('', '0'):
+            url, ext = play_url, 'mp4'
+            label = '标准无水印'
+            break
+        if choice == '1' and hd_url:
+            url, ext = hd_url, 'mp4'
+            label = '高清无水印'
+            break
+        if choice == '2' and wm_url:
+            url, ext = wm_url, 'mp4'
+            label = '带水印原版'
+            break
+        if choice == '3' and music_url:
+            url, ext = music_url, 'mp3'
+            label = '原声 mp3'
+            break
+        if choice == 'q':
+            print('↩ 已放弃，不下载')
+            return 'ok'
+        print('   输入无效，请重新选择')
+
+    path = build_filename(title, vid, ext)
+    if os.path.exists(path):
+        print(f'⇣ 文件已存在，跳过：{os.path.basename(path)}')
+        return 'ok'
+
+    print(f'\n⬇ 开始下载（{label}）…')
+    return 'ok' if download_file(url, path, proxies) else 'retry'
+
+
+# ============ 用户主页批量流程 ============
+
+def run_user_page_tikwm(unique_id, proxies):
+    """tikwm 引擎批量下载用户主页视频。返回 'ok' / 'retry' / 'abort'"""
+    cursor = 0
+    all_videos = []
+    print(f'\n▶ 用户主页：@{unique_id}（分页拉取，每页 33 条）')
+
+    # ---- 先拉第一页预览 ----
+    try:
+        data = tikwm_get('/user/posts',
+                         {'unique_id': unique_id, 'count': 33, 'cursor': 0},
+                         proxies)
+    except RuntimeError as e:
+        print(f'❌ {e}')
+        return 'retry'
+    videos = data.get('videos') or []
+    if not videos:
+        print('❌ 一条视频都没拿到（用户不存在 / 未登录被限流 / 该用户无私发视频）')
+        return 'abort'
+
+    all_videos.extend(videos)
+    _preview_videos(videos)
+
+    while True:
+        try:
+            choice = input('\n📥 回车=下载以上全部  数字N=只下前N条  '
+                           'm=再拉一页  q=放弃 > ').strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 'ok'
+
+        if choice == 'q':
+            print('↩ 已放弃')
+            return 'ok'
+
+        if choice == 'm':
+            if not data.get('hasMore'):
+                print('   没有更多了')
+                continue
+            cursor = data.get('cursor') or (cursor + 33)
+            try:
+                data = tikwm_get('/user/posts',
+                                 {'unique_id': unique_id, 'count': 33,
+                                  'cursor': cursor}, proxies)
+            except RuntimeError as e:
+                print(f'❌ {e}')
+                continue
+            videos = data.get('videos') or []
+            if not videos:
+                print('   没有更多了')
+                continue
+            all_videos.extend(videos)
+            _preview_videos(videos, start=len(all_videos) - len(videos) + 1)
+            continue
+
+        # 回车 = 全部；数字 = 前 N 条
+        if choice.isdigit() and int(choice) > 0:
+            targets = all_videos[:int(choice)]
+        else:
+            targets = all_videos
+        break
+
+    # ---- 批量下载 ----
+    # 过滤超时长视频
+    if MAX_DURATION:
+        n_before = len(targets)
+        targets = [v for v in targets
+                   if not v.get('duration') or v['duration'] <= MAX_DURATION]
+        if len(targets) < n_before:
+            print(f'⏭ 已按时长过滤（<{MAX_DURATION}s），跳过 {n_before - len(targets)} 条')
+
+    print(f'\n⬇ 开始批量下载，共 {len(targets)} 条（画质：{ {"play": "标准无水印", "hdplay": "高清无水印", "wmplay": "带水印"}[BATCH_QUALITY] }）')
+    ok = fail = skip = 0
+    for i, v in enumerate(targets, 1):
+        vid = v.get('video_id') or v.get('id', '')
+        title = v.get('title') or 'tiktok_video'
+        url = fix_url(v.get(BATCH_QUALITY) or v.get('play'))
+        path = build_filename(title, vid, 'mp4')
+        print(f'\n[{i}/{len(targets)}] {sanitize_filename(title, 40)}')
+        if not url:
+            print('  ⚠️ 无下载链接，跳过')
+            fail += 1
+            continue
+        if os.path.exists(path):
+            print('  ⇣ 已存在，跳过')
+            skip += 1
+            continue
+        if download_file(url, path, proxies):
+            ok += 1
+        else:
+            fail += 1
+        time.sleep(API_INTERVAL)
+
+    print(f'\n✅ 批量完成：成功 {ok}，跳过 {skip}，失败 {fail}')
+    print(f'💾 文件保存在：{DOWNLOAD_DIR}')
+    return 'ok' if fail == 0 else ('ok' if ok else 'retry')
+
+
+def _preview_videos(videos, start=1):
+    """预览视频列表（前 10 条）"""
+    print(f'共拉到 {len(videos)} 条：')
+    for i, v in enumerate(videos[:10], start):
+        dur = v.get('duration')
+        dur_str = f'{int(dur)}s' if dur else '?'
+        print(f'  {i:>3}. [{dur_str}] {sanitize_filename(v.get("title", "?"), 40)}')
+    if len(videos) > 10:
+        print(f'  … 以及另外 {len(videos) - 10} 条')
+
+
+# ============ yt-dlp 备用引擎 ============
+
+def run_ytdlp(target, proxies):
+    """yt-dlp 备用引擎：单视频 / 主页都直接交给它。返回 'ok' / 'retry'"""
+    if yt_dlp is None:
+        print('❌ yt-dlp 未安装（备用引擎不可用）')
+        return 'retry'
+
+    proxy = proxies['http'] if proxies else None
     opts = {
-        # 画质：优先无水印、限定高度，失败降级到任意最佳
-        'format': fmt,
-        # 文件名：标题 [视频ID].扩展名，标题截断 60 字符避免文件名过长
+        'format': 'best[format_id!*=download_addr]/best',
         'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title).60s [%(id)s].%(ext)s'),
-        # 音频模式转 mp3
-        'postprocessors': ([{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}]
-                           if AUDIO_ONLY else []),
-        # 重试（网络分片级别）
         'retries': 5,
         'fragment_retries': 10,
-        # 批量任务中单条失败不中断
         'ignoreerrors': True,
-        # 请求间隔：TikTok 对高频请求限流很凶，批量时放慢一点稳得多
-        'sleep_interval_requests': REQUEST_INTERVAL,
-        # 跳过已存在文件（断点续传）
+        'sleep_interval_requests': 1,
         'overwrites': False,
         'continuedl': True,
-        # 时长过滤：跳过超过 MAX_DURATION 秒的视频
-        'match_filter': (yt_dlp.utils.match_filter_func(f'duration<{MAX_DURATION}')
-                         if MAX_DURATION else None),
-        # 进度显示
-        'progress_hooks': [make_progress_hook()],
-        # 代理
-        'proxy': proxy,
-        # 杂项
         'quiet': True,
         'no_warnings': True,
         'noprogress': True,
+        'proxy': proxy,
+        'extractor_args': {'tiktok': {
+            'api_hostname': ['api16-normal-c-useast1a.tiktokv.com'],
+        }},
     }
-    if cookie_file:
-        # 用手动导出的 cookies.txt（最稳，新版 Chrome/Edge 加密读不了时的首选）
-        opts['cookiefile'] = cookie_file
-    elif cookie_browser:
-        # 借用浏览器的 TikTok 登录 Cookie
-        opts['cookiesfrombrowser'] = (cookie_browser,)
-    return opts
-
-
-import contextlib
-
-
-@contextlib.contextmanager
-def suppress_stderr():
-    """临时屏蔽 stderr（探测浏览器 Cookie 时 yt-dlp 会刷一堆无害的 ERROR）"""
-    devnull = os.open(os.devnull, os.O_WRONLY)
-    old = os.dup(2)
-    os.dup2(devnull, 2)
-    try:
-        yield
-    finally:
-        os.dup2(old, 2)
-        os.close(old)
-        os.close(devnull)
-
-
-def _try_cookie_opts(opts):
-    """用给定 opts 实例化 yt-dlp，检查 cookiejar 里是否有 TikTok 登录态。成功返回 True"""
-    ydl = None
-    try:
-        ydl = yt_dlp.YoutubeDL(opts)
-        for c in ydl.cookiejar:  # cookiejar 是惰性加载，访问时才可能抛异常
-            if 'tiktok' in (c.domain or '') and c.name in LOGIN_COOKIE_NAMES:
-                return True
-        return False
-    except Exception:
-        return False
-    finally:
-        if ydl is not None:
-            try:
-                ydl.close()
-            except Exception:
-                pass
-
-
-def resolve_cookies(base_opts):
-    """
-    决定 Cookie 来源，优先级：
-    1. 脚本同目录的 cookies_tiktok.txt（手动导出，最稳）
-    2. 各浏览器的登录 Cookie（Firefox 成功率最高）
-    返回 (cookie_browser, cookie_file)
-    """
-    # 方案 1：cookies_tiktok.txt（独立命名，跟 YouTube 的 cookies.txt 互不干扰）
     if os.path.exists(COOKIE_FILE):
-        opts = dict(base_opts)
         opts['cookiefile'] = COOKIE_FILE
-        with suppress_stderr():
-            ok = _try_cookie_opts(opts)
-        if ok:
-            print('[Cookie] 已使用 cookies_tiktok.txt（含 TikTok 登录态）✓')
-            return None, COOKIE_FILE
-        print('[Cookie] ⚠️ 找到 cookies_tiktok.txt 但读取失败或无登录态，已忽略')
 
-    # 方案 2：浏览器 Cookie（静默探测，失败不刷屏）
-    # Firefox 排最前：新版 Chrome/Edge 的加密 (app-bound encryption) 大概率读取失败
-    for browser in ('firefox', 'edge', 'chrome', 'brave'):
-        opts = dict(base_opts)
-        opts['cookiesfrombrowser'] = (browser,)
-        with suppress_stderr():
-            ok = _try_cookie_opts(opts)
-        if ok:
-            print(f'[Cookie] 已启用 {browser} 浏览器的 TikTok 登录 Cookie ✓')
-            return browser, None
-
-    # 都没有：不打扰用户 —— 无 Cookie 大多数情况也能下载，被限流了再说
-    print('[Cookie] 未携带登录 Cookie（单条视频一般不影响，批量拉主页可能被限流）')
-    return None, None
+    print('… 尝试备用引擎 yt-dlp…')
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ret = ydl.download([target])
+        if ret == 0:
+            print(f'✅ 下载完成！文件保存在：{DOWNLOAD_DIR}')
+            return 'ok'
+        return 'retry'
+    except yt_dlp.utils.DownloadError as e:
+        print(f'❌ yt-dlp 也失败了：{str(e)[:150]}')
+        return 'retry'
 
 
 # ============ 输入解析 ============
 
-def normalize_target(user_input):
+def normalize_target(user_input, proxies):
     """
-    把用户输入统一处理成 yt-dlp 能识别的目标：
-    - cURL 命令 → 提取里面的 TikTok 链接
-    - 去掉 URL 后面误粘贴的参数
+    把用户输入统一处理。
+    返回 (kind, target)：kind ∈ {'video', 'user', 'unknown'}
     """
     text = user_input.strip()
 
@@ -285,264 +477,76 @@ def normalize_target(user_input):
     if text.lower().startswith('curl '):
         m = re.search(r'https?://[^\s\'"]+', text)
         if m:
-            return m.group(1).rstrip('\\')
-        return text
-
-    # 直接给的链接：只保留到路径部分，去掉跟踪参数（is_from_webapp 等）
-    if 'tiktok.com' in text:
-        m = re.search(r'(https?://[^\s\'"]+tiktok\.com/[^\s\'"?]+)', text)
-        if m:
-            return m.group(1)
-
-    return text
-
-
-def is_single_video(target):
-    """判断目标是不是单条视频/图集链接（而非主页/话题页）"""
-    if re.search(r'tiktok\.com/@[^/]+/(video|photo)/\d+', target):
-        return True
-    # 分享短链也当单条视频处理（重定向后就是单条）
-    if re.search(r'(vm|vt)\.tiktok\.com/', target):
-        return True
-    return False
-
-
-def choose_quality(info):
-    """
-    列出该视频所有可选画质，让用户挑选。
-    返回 (画质描述, yt-dlp 格式字符串)；
-    用户主动放弃返回 ('quit', None)；解析不出画质返回 (None, None)
-    """
-    # 从格式列表里收集"有画面"的分辨率 → 估算大小、宽高、有无无水印版本
-    heights = {}
-    for f in info.get('formats') or []:
-        if not f.get('height') or f.get('vcodec') == 'none':
-            continue
-        h = f['height']
-        size = f.get('filesize') or f.get('filesize_approx')
-        clean = 'download_addr' not in (f.get('format_id') or '')  # 非水印流
-        old = heights.get(h)
-        if old is None:
-            heights[h] = (size, f.get('width'), clean)
+            text = m.group(1).rstrip('\\')
         else:
-            old_size, old_w, old_clean = old
-            if (clean and not old_clean) or \
-               (clean == old_clean and size and (not old_size or size > old_size)):
-                heights[h] = (max(size or 0, old_size or 0) or None, old_w,
-                              clean or old_clean)
-    if not heights:
-        return None, None  # 解析不出画质列表，让调用方走默认格式
+            return 'unknown', text
 
-    sorted_h = sorted(heights)
-    print('\n🎛  请选择画质：')
-    print('   0. 最佳画质（回车默认，优先无水印）')
-    for i, h in enumerate(sorted_h, 1):
-        size, w, clean = heights[h]
-        size_str = f'（约 {size / 1024 / 1024:.0f} MB）' if size else ''
-        mark = '' if clean else ' ⚠️仅带水印'
-        # 竖屏视频按短边（宽）标注画质：1080×1920 → 1080p 竖屏
-        label = f'{min(w, h)}p 竖屏' if (w and w < h) else f'{h}p'
-        print(f'   {i}. {label}{size_str}{mark}')
-    print('   a. 仅音频 mp3   q. 放弃下载')
+    # 裸 @用户名 → 主页
+    if re.fullmatch(r'@[\w\.\-]+', text):
+        return 'user', text[1:]
 
-    while True:
-        try:
-            choice = input(f'   选择 [0-{len(sorted_h)}/a/q] > ').strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            return 'quit', None
-        if choice in ('', '0'):
-            return '最佳画质', FMT_BEST
-        if choice == 'a':
-            return '仅音频 mp3', 'bestaudio/best'
-        if choice == 'q':
-            return 'quit', None
-        if choice.isdigit() and 1 <= int(choice) <= len(sorted_h):
-            h = sorted_h[int(choice) - 1]
-            w = heights[h][1]
-            # 优先该高度的无水印流，没有再回退带水印版
-            fmt = (f'best[height={h}]{NO_WATERMARK}/best[height<={h}]{NO_WATERMARK}'
-                   f'/best[height<={h}]/best')
-            # 竖屏按短边（宽）标注画质：1080×1920 → 1080p
-            label = f'{min(w, h)}p' if (w and w < h) else f'{h}p'
-            return label, fmt
-        print('   输入无效，请重新选择')
-
-
-def extract_info_quiet(target, opts, full=False):
-    """解析目标信息。full=True 时解析完整格式列表（单条视频选画质需要）"""
-    probe = dict(opts)
-    probe.pop('match_filter', None)   # 预览/选画质阶段不做时长过滤
-    if not full:
-        probe['extract_flat'] = True
-    with yt_dlp.YoutubeDL(probe) as ydl:
-        return ydl.extract_info(target, download=False)
-
-
-def report_extract_error(msg):
-    """打印解析失败的分类提示"""
-    print(f'❌ 获取视频信息失败：{msg[:200]}')
-    if 'Login required' in msg or 'login' in msg.lower():
-        print('   → TikTok 要求登录（未登录拉取被限制）！')
-        print('     解决：浏览器登录 TikTok 后导出 Cookie：')
-        print('        1. 浏览器装扩展「Get cookies.txt LOCALLY」')
-        print('        2. 打开 tiktok.com（保持登录）→ 点扩展导出')
-        print(f'        3. 重命名为 cookies_tiktok.txt 放到 {SCRIPT_DIR} → 重启脚本')
-        return 'abort'
-    elif 'HTTP Error 429' in msg or 'Too Many Requests' in msg:
-        print('   → 请求太频繁被限流，稍等几分钟再试（批量任务可调大 REQUEST_INTERVAL）')
-    elif 'not available' in msg.lower() or 'private' in msg.lower():
-        print('   → 视频可能已删除 / 设为私密')
-        return 'abort'
+    # 链接：去掉误粘贴的跟踪参数
+    m = re.search(r'(https?://[^\s\'"]*tiktok\.com/[^\s\'"?]+)', text)
+    if m:
+        text = m.group(1)
+    elif re.match(r'https?://(vm|vt)\.tiktok\.com/\S+', text):
+        pass
     else:
-        print('   （常见原因：代理没开 / 链接无效 / 视频已删除）')
-    return 'retry'
+        return 'unknown', text
+
+    # 短链 → 跟随重定向拿正式链接
+    text = resolve_short_url(text, proxies)
+
+    # 主页链接（没有 /video/ /photo/）→ 用户模式
+    if 'tiktok.com/@' in text and not re.search(r'/(video|photo)/\d+', text):
+        m = re.search(r'@([\w\.\-]+)', text)
+        if m:
+            return 'user', m.group(1)
+
+    return 'video', text
 
 
-def cleanup_intermediates():
-    """删除 yt-dlp 合并后残留的 .fNNN 中间分片文件"""
-    import glob
-    import time
-    for _ in range(3):                      # 合并刚结束时文件可能还被占用，稍等重试
-        leftovers = [p for p in glob.glob(os.path.join(DOWNLOAD_DIR, '*.*'))
-                     if re.search(r'\.f\d+\.[a-z0-9]+$', p, re.IGNORECASE)]
-        if not leftovers:
-            return
-        for path in leftovers:
-            try:
-                os.remove(path)
-                print(f'  🧹 清理中间文件：{os.path.basename(path)}')
-            except OSError:
-                pass                        # 被占用，等下一轮
-        time.sleep(0.5)
+# ============ 主流程 ============
 
-
-def report_saved_files(video_id):
-    """按视频 ID 找到下载成品，打印完整路径，方便用户直接定位"""
-    import glob
-    # 文件名模板是 "标题 [视频ID].ext"，glob 的 [] 是特殊字符，必须转义
-    pattern = os.path.join(DOWNLOAD_DIR, '*' + glob.escape(f'[{video_id}]') + '.*')
-    saved = [p for p in glob.glob(pattern) if not re.search(r'\.f\d+\.', p)]
-    for p in saved:
-        size_mb = os.path.getsize(p) / 1024 / 1024
-        print(f'💾 已保存：{p}（{size_mb:.1f} MB）')
-    if not saved:
-        print(f'💾 文件保存在：{DOWNLOAD_DIR}')
-
-
-def run_download(target, opts):
+def run_download(kind, target, proxies):
     """
-    执行下载。
-    返回：'ok' 成功 / 'retry' 可重试的失败 / 'abort' 无需重试的失败（需登录等）
+    执行下载，双引擎策略：tikwm 失败自动切 yt-dlp。
+    返回 'ok' / 'retry' / 'abort'
     """
-    print(f'\n▶ 目标：{target}')
+    print(f'\n▶ 目标：{target if kind != "user" else "@" + target}')
     print('=' * 60)
 
-    # ---------- 分支一：单条视频 → 完整解析 + 画质选择菜单 ----------
-    if is_single_video(target):
-        try:
-            # full=True：需要完整格式列表才能列出画质菜单
-            info = extract_info_quiet(target, opts, full=True)
-        except yt_dlp.utils.DownloadError as e:
-            return report_extract_error(str(e))
+    # tikwm 主引擎
+    if kind == 'user':
+        result = run_user_page_tikwm(target, proxies)
+    else:
+        result = run_single_tikwm(target, proxies)
 
-        if not info:
-            print('❌ 未解析到视频信息（链接可能已删除）')
-            return 'abort'
+    # tikwm 失败 → yt-dlp 备用引擎
+    if result == 'retry' and yt_dlp:
+        ydl_target = target if kind == 'video' else f'https://www.tiktok.com/@{target}'
+        result = run_ytdlp(ydl_target, proxies)
 
-        dur = info.get('duration')
-        dur_str = f'{int(dur)}s' if dur else '?'
-        print(f'  标题：{info.get("title", "?")}')
-        print(f'  时长：{dur_str}   作者：{info.get("uploader", "?")}')
+    return result
 
-        quality, fmt = choose_quality(info)
-        if quality == 'quit':
-            print('↩ 已放弃，不下载')
-            return 'ok'
-        if not fmt:
-            # 解析不出画质列表 → 走默认格式
-            quality, fmt = '默认画质', opts.get('format', 'best')
-
-        final_opts = dict(opts)
-        final_opts['format'] = fmt
-        final_opts.pop('match_filter', None)  # 手动指定的视频不做时长过滤
-        if quality == '仅音频 mp3':
-            final_opts['postprocessors'] = [{'key': 'FFmpegExtractAudio',
-                                             'preferredcodec': 'mp3'}]
-        print(f'\n⬇ 开始下载（{quality}）…')
-        try:
-            with yt_dlp.YoutubeDL(final_opts) as ydl:
-                ydl.download([target])
-            cleanup_intermediates()
-            print('✅ 下载完成！')
-            report_saved_files(info.get('id', ''))
-            return 'ok'
-        except yt_dlp.utils.DownloadError as e:
-            print(f'❌ 下载出错：{str(e)[:200]}')
-            return 'retry'
-
-    # ---------- 分支二：批量目标（主页/话题） → 预览 + 按上限下载 ----------
-    try:
-        info = extract_info_quiet(target, opts, full=False)
-    except yt_dlp.utils.DownloadError as e:
-        return report_extract_error(str(e))
-
-    if info and 'entries' in info:
-        entries = [e for e in info['entries'] if e]
-        if not entries:
-            print('❌ 一条视频都没拿到：多半是未登录被限流，按上方 Cookie 提示导出后重试')
-            return 'abort'
-        n_will_skip = sum(1 for e in entries
-                          if MAX_DURATION and e.get('duration')
-                          and e['duration'] > MAX_DURATION)
-        print(f'共发现 {len(entries)} 条视频'
-              + (f'（其中 {n_will_skip} 条超时长将被跳过）' if n_will_skip else '') + '：')
-        for i, e in enumerate(entries[:10], 1):
-            dur = e.get('duration')
-            dur_str = f'{int(dur)}s' if dur else '?'
-            skip = bool(MAX_DURATION and dur and dur > MAX_DURATION)
-            print(f'  {i:>3}. [{dur_str}] {str(e.get("title", "?"))[:50]}'
-                  + (' ⇣跳过' if skip else ''))
-        if len(entries) > 10:
-            print(f'  … 以及另外 {len(entries) - 10} 条')
-
-    # ---------- 正式下载（应用时长过滤 + 画质上限） ----------
-    try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([target])
-        cleanup_intermediates()
-        print('✅ 全部完成！')
-        print(f'💾 文件保存在：{DOWNLOAD_DIR}')
-        return 'ok'
-    except yt_dlp.utils.DownloadError as e:
-        print(f'❌ 下载出错：{str(e)[:200]}')
-        return 'retry'
-
-
-# ============ 主循环 ============
 
 def main():
     print('=' * 60)
-    print('   TikTok 视频批量下载器（yt-dlp 版）')
+    print('   TikTok 视频批量下载器（tikwm + yt-dlp 双引擎）')
     print('=' * 60)
     print(f'保存目录：{os.path.abspath(DOWNLOAD_DIR)}')
-    print(f'批量任务画质上限：{"仅音频 mp3" if AUDIO_ONLY else (f"{MAX_HEIGHT}p" if MAX_HEIGHT else "不限制")}'
-          '（单条链接会弹画质菜单自选）')
     if MAX_DURATION:
-        print(f'时长过滤：仅下载短于 {MAX_DURATION} 秒的视频（配置区 MAX_DURATION 可改）')
+        print(f'时长过滤：批量任务仅下载短于 {MAX_DURATION} 秒的视频（配置区 MAX_DURATION 可改）')
     print()
     print('支持的输入：')
     print('  1. 视频链接    https://www.tiktok.com/@用户名/video/xxxx')
     print('  2. 分享短链    https://vm.tiktok.com/xxxx/')
-    print('  3. 用户主页    https://www.tiktok.com/@用户名')
-    print('  4. 话题标签页  https://www.tiktok.com/tag/关键词')
-    print('  5. cURL 命令   （从浏览器 DevTools 复制）')
+    print('  3. 用户主页    https://www.tiktok.com/@用户名  或  @用户名')
+    print('  4. cURL 命令   （从浏览器 DevTools 复制）')
     print('  输入 q 退出')
     print()
 
-    proxy = get_proxy()
-    cookie_browser, cookie_file = resolve_cookies(build_opts(proxy))
-    opts = build_opts(proxy, cookie_browser, cookie_file)
+    proxies = get_proxies()
 
     while True:
         try:
@@ -557,13 +561,19 @@ def main():
             print('再见！')
             break
 
-        target = normalize_target(user_input)
+        kind, target = normalize_target(user_input, proxies)
+        if kind == 'unknown':
+            print('⚠️ 看不懂这个输入，请粘贴 TikTok 链接、@用户名 或 cURL 命令')
+            continue
+
         for attempt in range(1, MAX_RETRIES + 1):
-            result = run_download(target, opts)
+            result = run_download(kind, target, proxies)
             if result in ('ok', 'abort'):
                 break
             if attempt < MAX_RETRIES:
-                print(f'… 第 {attempt} 次失败，重试（{attempt}/{MAX_RETRIES}）')
+                wait = attempt * 5
+                print(f'… 第 {attempt} 次失败，{wait}s 后重试（{attempt}/{MAX_RETRIES}）')
+                time.sleep(wait)
             else:
                 print('❌ 重试次数用完，跳过该目标')
 
