@@ -17,17 +17,18 @@ YouTube 短视频批量下载器（基于 yt-dlp）
 使用方法：
 1. 直接运行：python YouTube-downloader.py
 2. 把链接或搜索词粘贴进去，回车开始下载
-3. 单条视频链接：会先列出该视频所有可选画质（360p/480p/720p/1080p…），
-   输入编号选择后再下载；回车直接下最佳画质
-4. 频道/播放列表/搜索：批量下载，按配置区画质上限执行
-5. 视频保存到 downloads_youtube/ 目录
-6. 输入 q 退出
+3. 单条视频链接：先显示视频信息，再弹画质菜单（列出该视频实际可用的画质）
+4. 频道/播放列表/搜索：先列出视频预览，再弹同一套画质菜单（通用画质阶梯）
+5. 画质菜单统一操作：回车/0 = 最佳画质；数字 = 选对应画质；
+   a = 仅音频 mp3；q = 放弃下载
+6. 视频保存到 downloads_youtube/ 目录
+7. 输入 q 退出
 
 特点：
 - 自动检测系统代理（Clash 7897/7890 等），也支持直连
 - 自动识别 Cookie：优先 cookies.txt，其次浏览器（Firefox 成功率最高）；
   没有 Cookie 一般也能下载，被机器人验证拦截时按提示导出即可
-- 单条链接自动弹出画质选择菜单
+- 单条/批量任务共用同一套画质选择菜单（回车=最佳画质，a=仅音频 mp3）
 - 自动跳过已下载的视频（断点续传）
 - 单条失败不中断批量任务
 - 失败自动重试（yt-dlp 内置 + 外层重试）
@@ -63,8 +64,8 @@ yt_dlp.YoutubeDL.deprecated_feature = lambda self, message: None
 # 下载目录：锚定到脚本所在目录（不管从哪里启动，文件都存在同一处）
 DOWNLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             'downloads_youtube')
-MAX_HEIGHT = 720                            # 批量任务（频道/列表/搜索）的画质上限（None = 不限制）
-                                            # 单条链接不受此限，会弹出画质选择菜单
+MAX_HEIGHT = 720                            # 画质菜单解析失败时的兜底上限（None = 不限制）
+                                            # 正常流程以下载前弹出的统一画质菜单为准
 MAX_DURATION = 180                          # 批量任务只下载短于该秒数的视频（None = 不限制）
                                             # 单条链接不受此限（既然手动指定了，就下）
 AUDIO_ONLY = False                          # True = 只下载音频（mp3）
@@ -302,22 +303,29 @@ def is_single_video(target):
     return any(k in target for k in ('watch?v=', '/shorts/', 'youtu.be/'))
 
 
-def choose_quality(info):
+def choose_quality(info=None):
     """
-    列出该视频所有可选画质，让用户挑选。
+    统一的画质选择菜单（单条链接 / 批量任务共用同一套）。
+    - 传入 info（单条视频）：列出该视频实际可用的画质（含大小估算）
+    - 不传 info（批量任务）：列出通用画质阶梯
+    统一操作：回车/0 = 最佳画质；数字 = 对应画质；a = 仅音频 mp3；q = 放弃。
     返回 (画质描述, yt-dlp 格式字符串)；
     用户主动放弃返回 ('quit', None)；解析不出画质返回 (None, None)
     """
-    # 从格式列表里收集"有画面"的分辨率 → 估算大小、宽高
-    heights = {}
-    for f in info.get('formats') or []:
-        if not f.get('height') or f.get('vcodec') == 'none':
-            continue
-        h = f['height']
-        size = f.get('filesize') or f.get('filesize_approx')
-        old = heights.get(h)
-        if old is None or (size and (not old[0] or size > old[0])):
-            heights[h] = (size, f.get('width'))
+    if info is not None:
+        # 从格式列表里收集"有画面"的分辨率 → 估算大小、宽高
+        heights = {}
+        for f in info.get('formats') or []:
+            if not f.get('height') or f.get('vcodec') == 'none':
+                continue
+            h = f['height']
+            size = f.get('filesize') or f.get('filesize_approx')
+            old = heights.get(h)
+            if old is None or (size and (not old[0] or size > old[0])):
+                heights[h] = (size, f.get('width'))
+    else:
+        # 批量任务：通用画质阶梯（不逐条解析格式，速度快）
+        heights = {h: (None, None) for h in (360, 480, 720, 1080, 1440, 2160)}
     if not heights:
         return None, None  # 解析不出画质列表，让调用方走默认格式
 
@@ -346,7 +354,7 @@ def choose_quality(info):
             return 'quit', None
         if choice.isdigit() and 1 <= int(choice) <= len(sorted_h):
             h = sorted_h[int(choice) - 1]
-            fmt = (f'bestvideo[height={h}]+bestaudio/best[height<={h}]/best')
+            fmt = (f'bestvideo[height<={h}]+bestaudio/best[height<={h}]/best')
             w = heights[h][1]
             # 竖屏按短边（宽）标注画质：1080×1920 → 1080p
             label = f'{min(w, h)}p' if (w and w < h) else f'{h}p'
@@ -496,9 +504,25 @@ def run_download(target, opts, fallback_opts):
         if len(entries) > 10:
             print(f'  … 以及另外 {len(entries) - 10} 条')
 
+    # ---------- 选画质（与单条视频同一套菜单） ----------
+    quality, fmt = choose_quality()
+    if quality == 'quit':
+        print('↩ 已放弃，不下载')
+        return 'ok'
+    if not fmt:
+        # 解析不出画质列表 → 走默认格式（配置区 MAX_HEIGHT 兜底）
+        quality, fmt = '默认画质', used_opts.get('format', 'best')
+
+    final_opts = dict(used_opts)
+    final_opts['format'] = fmt
+    if quality == '仅音频 mp3':
+        final_opts['postprocessors'] = [{'key': 'FFmpegExtractAudio',
+                                         'preferredcodec': 'mp3'}]
+    print(f'\n⬇ 开始批量下载（{quality}）…')
+
     # ---------- 正式下载（应用时长过滤 + 画质上限） ----------
     try:
-        with yt_dlp.YoutubeDL(used_opts) as ydl:
+        with yt_dlp.YoutubeDL(final_opts) as ydl:
             ydl.download([target])
         cleanup_intermediates()
         print('✅ 全部完成！')
@@ -516,8 +540,7 @@ def main():
     print('   YouTube 短视频批量下载器（yt-dlp 版）')
     print('=' * 60)
     print(f'保存目录：{os.path.abspath(DOWNLOAD_DIR)}')
-    print(f'批量任务画质上限：{"仅音频 mp3" if AUDIO_ONLY else (f"{MAX_HEIGHT}p" if MAX_HEIGHT else "不限制")}'
-          '（单条链接会弹画质菜单自选）')
+    print('下载前会弹统一画质菜单：回车 = 最佳画质，也可选 360p~4K 或仅音频 mp3')
     if MAX_DURATION:
         print(f'时长过滤：仅下载短于 {MAX_DURATION} 秒的视频（配置区 MAX_DURATION 可改）')
     print()
