@@ -157,9 +157,7 @@ def build_opts(proxy, cookie_browser=None, cookie_file=None, player_clients=None
     """构建 yt-dlp 选项；cookie_browser / cookie_file 用于携带登录 Cookie"""
     if player_clients is None:
         player_clients = PRIMARY_CLIENTS
-    fmt = ('bestaudio/best' if AUDIO_ONLY
-           else (f'bestvideo[height<={MAX_HEIGHT}]+bestaudio/best[height<={MAX_HEIGHT}]/best'
-                 if MAX_HEIGHT else 'bestvideo+bestaudio/best'))
+    fmt = ('bestaudio/best' if AUDIO_ONLY else fmt_for_height(MAX_HEIGHT))
 
     opts = {
         # 画质：优先限定高度的视频+音频合并，失败降级到最佳
@@ -303,6 +301,21 @@ def is_single_video(target):
     return any(k in target for k in ('watch?v=', '/shorts/', 'youtu.be/'))
 
 
+def fmt_for_height(h):
+    """
+    按画质数值生成格式串（横竖屏通吃）。
+    ⚠️ Shorts 是竖屏：720p 竖屏的实际分辨率是 720×1280（宽=720，高=1280），
+    如果按 height<=720 过滤，竖屏 720p（高 1280）根本匹配不上，只会选到 360p！
+    所以：
+    1) 先按宽度精确匹配（竖屏的短边 = 画质数值）
+    2) 再按高度精确匹配（横屏的高度 = 画质数值）
+    3) 都没有（该视频没这个画质）→ 不限画质，选最佳
+    """
+    return (f'bestvideo[width={h}]+bestaudio/'
+            f'bestvideo[height={h}]+bestaudio/'
+            f'bestvideo+bestaudio/best')
+
+
 def choose_quality(info=None):
     """
     统一的画质选择菜单（单条链接 / 批量任务共用同一套）。
@@ -354,11 +367,10 @@ def choose_quality(info=None):
             return 'quit', None
         if choice.isdigit() and 1 <= int(choice) <= len(sorted_h):
             h = sorted_h[int(choice) - 1]
-            fmt = (f'bestvideo[height<={h}]+bestaudio/best[height<={h}]/best')
             w = heights[h][1]
             # 竖屏按短边（宽）标注画质：1080×1920 → 1080p
-            label = f'{min(w, h)}p' if (w and w < h) else f'{h}p'
-            return label, fmt
+            label_h = min(w, h) if (w and w < h) else h
+            return f'{label_h}p', fmt_for_height(label_h)
         print('   输入无效，请重新选择')
 
 
