@@ -21,10 +21,11 @@
 
 | 目录 | 内容 | 亮点 |
 |------|------|------|
-| [`爬虫/`](爬虫/) | 视频/音乐/漫画下载器、网页数据采集 | B站、Twitter/X、网易云、漫画站批量下载 |
-| [`淘宝爬虫练习/`](淘宝爬虫练习/) | 淘宝商品详情爬虫练习 | 基于 Scrapling 的三天学习计划 |
+| [`爬虫/`](爬虫/) | 视频/音乐/漫画下载器、网页数据采集 | B站、TikTok、YouTube、Twitter/X、网易云、漫画站批量下载 |
+| [`淘宝爬虫练习/`](淘宝爬虫练习/) | 淘宝商品详情爬虫练习 | 基于 Scrapling，三天计划已全部跑完 |
 | [`theCrag/`](theCrag/) | 全球攀岩数据爬虫 | 异步爬取 + 断点续传 + CSV 导出 |
 | [`电影票分析/`](电影票分析/) | 影院 K-means 聚类分析 | 数据分析完整链路 + 可视化报告 |
+| [`格式工厂/`](格式工厂/) | ffmpeg 音视频转换 | MP4 批量转 MP3 |
 | [`Excel/`](Excel/) | openpyxl 办公自动化 | Excel 全功能展示 + 透视表生成 |
 | [`Word/`](Word/) | python-docx 办公自动化 | Word 全功能展示 + 申报书排版 |
 | [`PPT/`](PPT/) | pptxgenjs / python-pptx 生成 PPT | Dify Agent、PyCharm 团队协作等主题 |
@@ -45,19 +46,32 @@
 
 一套"拿到链接就能下"的小工具，支持多种输入格式：
 
-- **`manga_download.py`** — 漫画图片批量下载器
-  - 支持章节 URL / 单张图片 URL / cURL 命令
-  - 自动检测系统代理、多线程并发、失败重试、断点续传
+**视频类** 🎬
+- **`Tiktok-downloader.py`** — TikTok 下载器（双引擎：tikwm API 主引擎 + yt-dlp 备用）
+  - 单视频画质菜单、图集、分享短链、多链接批量模式，支持提取原声 mp3
+- **`YouTube-downloader.py`** — YouTube 批量下载器（基于 yt-dlp）
+  - 单视频 / Shorts / 频道 / 播放列表 / 关键字搜索，画质菜单 + 纯音频 mp3，自动检测代理和 Cookie
 - **`bilibili_download.py`** — B站视频下载器
   - 支持 dash/durl 格式，自动合并音视频（需 ffmpeg）
 - **`Twitter_download_video.py`** — Twitter/X 视频下载器
   - 支持视频 URL / 帖子 URL / Sotwe 镜像 / cURL
+- **`VIP视频破解程序.py`** — 视频解析下载（仅供学习）
+- **`Qwen_Day/Night_download_video.py`** — 千问空间视频下载（临时签名链接 + cURL 粘贴）
+
+**音乐/漫画类** 🎵
 - **`Wangyi_download_music.py`** — 网易云音乐音频下载器
   - 通过浏览器开发者工具获取临时签名链接下载
+- **`manhua_download.py`** — 漫画图片批量下载器
+  - 支持章节 URL / 单张图片 URL / cURL 命令，自动检测系统代理、多线程并发、失败重试、断点续传
+- **`mhxiaoshen_download.py`** — 漫画站专用下载器
+  - data-src 直提 + Referer 防盗链处理，独立下载目录
+
+**数据采集类** 📊
+- **`Taobao.py`** — 淘宝店铺信息爬取
 
 ### 2. 淘宝爬虫练习 [`淘宝爬虫练习/`](淘宝爬虫练习/)
 
-为期三天的 Scrapling 爬虫实战练习计划，目标是跑通「关键词 → 搜索页 → 商品详情页」的完整链路。详见 [`PLAN.md`](淘宝爬虫练习/PLAN.md)。
+为期三天的 Scrapling 爬虫实战练习，目标是跑通「关键词 → 搜索页 → 商品详情页」的完整链路。day1 ~ day3 已全部完成，数据和笔记都在对应目录里。详见 [`PLAN.md`](淘宝爬虫练习/PLAN.md)。
 
 ### 3. theCrag 全球攀岩数据爬虫 [`theCrag/`](theCrag/)
 
@@ -87,7 +101,11 @@
 
 - **`brick_breaker.py`** — 竖屏砖块破坏者，带连锁变色和分裂小球机制 🎮
 
-### 7. 学习资料沉淀
+### 7. 格式工厂 [`格式工厂/`](格式工厂/)
+
+- **`mp4_mp3.py`** — 基于 ffmpeg 的 MP4 批量转 MP3 小工具，自动创建输出目录 🎵
+
+### 8. 学习资料沉淀
 
 - [`experiments.html`](experiments.html) — Python 数据分析实验手册
 - [`习思想期末复习/刷题题库.html`](习思想期末复习/刷题题库.html) — 期末复习题库
@@ -98,11 +116,12 @@
 ## 技术栈 🛠️
 
 - **编程语言**：Python 3.10+
-- **爬虫**：requests、Scrapling、urllib、asyncio、BeautifulSoup
+- **爬虫**：requests、yt-dlp、Scrapling、urllib、asyncio、BeautifulSoup
 - **数据分析**：pandas、numpy、matplotlib、scikit-learn
 - **办公自动化**：openpyxl、python-docx、python-pptx
 - **PPT 生成**：pptxgenjs（Node.js）
 - **可视化**：pyecharts、matplotlib
+- **音视频处理**：ffmpeg（视频合并、MP4 转 MP3）
 - **游戏开发**：pygame
 - **大数据入门**：PySpark
 
@@ -136,7 +155,7 @@ pip install requests
 python manhua_download.py
 ```
 
-> 小提示：部分脚本需要 ffmpeg（视频合并）、浏览器开发者工具抓取的 Cookie/URL 等，详见各脚本头部注释。
+> 小提示：部分脚本需要 ffmpeg（视频合并 / 转 MP3）、浏览器开发者工具抓取的 Cookie/URL 等，详见各脚本头部注释。
 
 ---
 
@@ -149,4 +168,4 @@ python manhua_download.py
 
 ---
 
-*Last updated: 2026-08-02*
+*Last updated: 2026-09-07*
