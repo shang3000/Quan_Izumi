@@ -34,6 +34,7 @@ YouTube 短视频批量下载器（基于 yt-dlp）
 - 失败自动重试（yt-dlp 内置 + 外层重试）
 - 软封禁熔断：连续多条 "Video unavailable" 时自动停止批量任务并给出提示
   （批量下载几百条后节点 IP 被 YouTube 限流，所有视频都会报 unavailable）
+- 熔断后续爬：换 Clash 节点 → 回一个回车 → 按下载档案秒跳已完成的视频，从断点继续
 
 ⚠️ 机器人验证（"Sign in to confirm you're not a bot"）：
 这是代理出口 IP 被 YouTube 标记导致的。先换个 Clash 节点；
@@ -76,6 +77,11 @@ UNAVAILABLE_BREAK = 8                       # 批量下载中连续多少条 "Vi
                                             # （连续大量不可用 = 当前节点 IP 被 YouTube 软封禁，
                                             #   继续挨个试只会刷屏浪费时间）
 REQUEST_INTERVAL = 0.5                      # 每次请求间隔（秒），降低触发限流的概率；0 = 关闭
+
+# 下载档案：记录已成功下载的视频 ID。重跑同一频道/列表时，
+# 已下载的条目在「解析之前」就被跳过 → 熔断后换节点回车续爬时秒级断点续传
+ARCHIVE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            'downloaded_youtube.txt')
 
 # 常见本地代理端口（Clash / v2ray 等）
 PROXY_PORTS = [7897, 7890, 7891, 10809, 1080]
@@ -185,6 +191,8 @@ def build_opts(proxy, cookie_browser=None, cookie_file=None, player_clients=None
         # 跳过已存在文件（断点续传）
         'overwrites': False,
         'continuedl': True,
+        # 下载档案：记录已下载 ID，重跑时跳过（配合熔断续爬实现秒级断点）
+        'download_archive': ARCHIVE_FILE,
         # 时长过滤：跳过超过 MAX_DURATION 秒的长视频
         'match_filter': (yt_dlp.utils.match_filter_func(f'duration<{MAX_DURATION}')
                          if MAX_DURATION else None),
@@ -591,29 +599,41 @@ def run_download(target, opts, fallback_opts):
     if quality == '仅音频 mp3':
         final_opts['postprocessors'] = [{'key': 'FFmpegExtractAudio',
                                          'preferredcodec': 'mp3'}]
-    # 软封禁熔断器：连续大量 unavailable 时停止批量，不再刷屏硬扛
-    guard = FloodGuard(UNAVAILABLE_BREAK)
-    final_opts['logger'] = guard
-    final_opts['progress_hooks'] = list(final_opts.get('progress_hooks') or []) + [guard.reset]
+    base_hooks = list(final_opts.get('progress_hooks') or [])
     print(f'\n⬇ 开始批量下载（{quality}）…')
 
     # ---------- 正式下载（应用时长过滤 + 画质上限） ----------
-    try:
-        with yt_dlp.YoutubeDL(final_opts) as ydl:
-            ydl.download([target])
-        cleanup_intermediates()
-        print('✅ 全部完成！')
-        print(f'💾 文件保存在：{DOWNLOAD_DIR}')
-        return 'ok'
-    except yt_dlp.utils.DownloadCancelled as e:
-        print(f'⛔ 熔断：{e}')
-        print('   建议：① 换个 Clash 节点再试；② 或等十几分钟让限流解除；')
-        print('        ③ 导出登录 cookies.txt（见文件头说明）会稳定很多。')
-        print(f'   ℹ️ 已下载的部分不受影响，重跑同一目标会自动跳过已完成的视频。')
-        return 'abort'
-    except yt_dlp.utils.DownloadError as e:
-        print(f'❌ 下载出错：{str(e)[:200]}')
-        return 'retry'
+    # 熔断后续传循环：换节点 → 回车 → 用下载档案秒跳已下载的，从断点继续
+    while True:
+        # 软封禁熔断器：连续大量 unavailable 时停止批量，不再刷屏硬扛
+        guard = FloodGuard(UNAVAILABLE_BREAK)
+        final_opts['logger'] = guard
+        final_opts['progress_hooks'] = base_hooks + [guard.reset]
+        try:
+            with yt_dlp.YoutubeDL(final_opts) as ydl:
+                ydl.download([target])
+            cleanup_intermediates()
+            print('✅ 全部完成！')
+            print(f'💾 文件保存在：{DOWNLOAD_DIR}')
+            return 'ok'
+        except yt_dlp.utils.DownloadCancelled as e:
+            print(f'⛔ 熔断：{e}')
+            print('   大概率是当前节点 IP 被 YouTube 限流。请先在 Clash 切换节点')
+            print('   （或等十几分钟让限流解除；导出 cookies.txt 登录态会更稳）。')
+            try:
+                choice = input('   ↵ 回车 = 已换节点，继续下载剩余视频 | s = 跳过该目标 | q = 退出程序 > ').strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return 'abort'
+            if choice == 'q':
+                print('再见！')
+                return 'exit'
+            if choice == 's':
+                return 'abort'
+            print('↩ 继续下载剩余视频…（已下载的部分按档案秒级跳过）\n')
+        except yt_dlp.utils.DownloadError as e:
+            print(f'❌ 下载出错：{str(e)[:200]}')
+            return 'retry'
 
 
 # ============ 主循环 ============
@@ -654,10 +674,11 @@ def main():
             break
 
         target = normalize_target(user_input)
+        result = None
         try:
             for attempt in range(1, MAX_RETRIES + 1):
                 result = run_download(target, opts, fallback_opts)
-                if result in ('ok', 'abort'):
+                if result in ('ok', 'abort', 'exit'):
                     break
                 if attempt < MAX_RETRIES:
                     print(f'… 第 {attempt} 次失败，重试（{attempt}/{MAX_RETRIES}）')
@@ -667,6 +688,9 @@ def main():
             print('\n↩ 已中断当前任务（程序继续运行）')
         except Exception as e:
             print(f'❌ 发生未预期的错误（已拦截，程序继续运行）：{type(e).__name__}: {e}')
+
+        if result == 'exit':
+            break
 
         print('=' * 60)
 
