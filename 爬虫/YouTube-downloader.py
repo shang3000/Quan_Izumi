@@ -32,6 +32,8 @@ YouTube 短视频批量下载器（基于 yt-dlp）
 - 自动跳过已下载的视频（断点续传）
 - 单条失败不中断批量任务
 - 失败自动重试（yt-dlp 内置 + 外层重试）
+- 软封禁熔断：连续多条 "Video unavailable" 时自动停止批量任务并给出提示
+  （批量下载几百条后节点 IP 被 YouTube 限流，所有视频都会报 unavailable）
 
 ⚠️ 机器人验证（"Sign in to confirm you're not a bot"）：
 这是代理出口 IP 被 YouTube 标记导致的。先换个 Clash 节点；
@@ -70,6 +72,10 @@ MAX_DURATION = 180                          # 批量任务只下载短于该秒�
                                             # 单条链接不受此限（既然手动指定了，就下）
 AUDIO_ONLY = False                          # True = 只下载音频（mp3）
 MAX_RETRIES = 3                             # 外层重试次数
+UNAVAILABLE_BREAK = 8                       # 批量下载中连续多少条 "Video unavailable" 就熔断停止
+                                            # （连续大量不可用 = 当前节点 IP 被 YouTube 软封禁，
+                                            #   继续挨个试只会刷屏浪费时间）
+REQUEST_INTERVAL = 0.5                      # 每次请求间隔（秒），降低触发限流的概率；0 = 关闭
 
 # 常见本地代理端口（Clash / v2ray 等）
 PROXY_PORTS = [7897, 7890, 7891, 10809, 1080]
@@ -188,6 +194,8 @@ def build_opts(proxy, cookie_browser=None, cookie_file=None, player_clients=None
         'proxy': proxy,
         # 客户端伪装（见顶部 PRIMARY_CLIENTS / FALLBACK_CLIENTS 说明）
         'extractor_args': {'youtube': {'player_client': list(player_clients)}},
+        # 请求间隔：降低连续请求被 YouTube 限流的概率
+        'sleep_interval_requests': (REQUEST_INTERVAL if REQUEST_INTERVAL > 0 else None),
         # 杂项
         'quiet': True,
         'no_warnings': True,
@@ -219,6 +227,59 @@ def suppress_stderr():
         os.dup2(old, 2)
         os.close(old)
         os.close(devnull)
+
+
+class FloodGuard:
+    """
+    软封禁熔断器（自定义 yt-dlp logger）。
+
+    现象：批量下载约 300 条后，当前代理节点 IP 被 YouTube 限流，
+    之后每条视频的解析都返回 "Video unavailable"（封禁的伪装形式），
+    yt-dlp 在 ignoreerrors 下会把剩下几百条挨个试一遍 → ERROR 刷屏。
+
+    对策：
+    - 统计连续 "Video unavailable" 条数（每当有视频下载成功就清零）
+    - 达到阈值直接抛 DownloadCancelled 熔断整个批量任务
+    - bot 验证拦截更是直接熔断（继续试毫无意义）
+    """
+
+    def __init__(self, limit):
+        self.limit = limit
+        self.streak = 0          # 连续不可用计数
+        self.shown = 0           # 已完整打印的错误条数（前几条照常显示，后面静默）
+
+    def reset(self, d=None):
+        """下载成功回调：清零连续计数"""
+        if d is None or d.get('status') == 'finished':
+            self.streak = 0
+
+    def debug(self, msg):
+        pass
+
+    def info(self, msg):
+        pass
+
+    def warning(self, msg):
+        pass
+
+    def error(self, msg):
+        msg = str(msg)
+        # bot 验证：节点被标记，立即熔断
+        if 'Sign in to confirm' in msg or 'not a bot' in msg:
+            raise yt_dlp.utils.DownloadCancelled(
+                'YouTube 机器人验证拦截，批量任务已熔断')
+        if 'Video unavailable' in msg or 'Private video' in msg:
+            self.streak += 1
+            if self.shown < 3:
+                print(f'  [跳过] {msg}')
+                self.shown += 1
+            elif self.streak == self.limit:
+                print(f'  … 连续 {self.streak} 条视频不可用，熔断停止本次批量任务')
+            if self.streak >= self.limit:
+                raise yt_dlp.utils.DownloadCancelled(
+                    f'连续 {self.streak} 条视频 unavailable（疑似节点 IP 被软封禁）')
+        else:
+            print(f'  [错误] {msg}')
 
 
 def _try_cookie_opts(opts):
@@ -530,6 +591,10 @@ def run_download(target, opts, fallback_opts):
     if quality == '仅音频 mp3':
         final_opts['postprocessors'] = [{'key': 'FFmpegExtractAudio',
                                          'preferredcodec': 'mp3'}]
+    # 软封禁熔断器：连续大量 unavailable 时停止批量，不再刷屏硬扛
+    guard = FloodGuard(UNAVAILABLE_BREAK)
+    final_opts['logger'] = guard
+    final_opts['progress_hooks'] = list(final_opts.get('progress_hooks') or []) + [guard.reset]
     print(f'\n⬇ 开始批量下载（{quality}）…')
 
     # ---------- 正式下载（应用时长过滤 + 画质上限） ----------
@@ -540,6 +605,12 @@ def run_download(target, opts, fallback_opts):
         print('✅ 全部完成！')
         print(f'💾 文件保存在：{DOWNLOAD_DIR}')
         return 'ok'
+    except yt_dlp.utils.DownloadCancelled as e:
+        print(f'⛔ 熔断：{e}')
+        print('   建议：① 换个 Clash 节点再试；② 或等十几分钟让限流解除；')
+        print('        ③ 导出登录 cookies.txt（见文件头说明）会稳定很多。')
+        print(f'   ℹ️ 已下载的部分不受影响，重跑同一目标会自动跳过已完成的视频。')
+        return 'abort'
     except yt_dlp.utils.DownloadError as e:
         print(f'❌ 下载出错：{str(e)[:200]}')
         return 'retry'
@@ -583,14 +654,19 @@ def main():
             break
 
         target = normalize_target(user_input)
-        for attempt in range(1, MAX_RETRIES + 1):
-            result = run_download(target, opts, fallback_opts)
-            if result in ('ok', 'abort'):
-                break
-            if attempt < MAX_RETRIES:
-                print(f'… 第 {attempt} 次失败，重试（{attempt}/{MAX_RETRIES}）')
-            else:
-                print('❌ 重试次数用完，跳过该目标')
+        try:
+            for attempt in range(1, MAX_RETRIES + 1):
+                result = run_download(target, opts, fallback_opts)
+                if result in ('ok', 'abort'):
+                    break
+                if attempt < MAX_RETRIES:
+                    print(f'… 第 {attempt} 次失败，重试（{attempt}/{MAX_RETRIES}）')
+                else:
+                    print('❌ 重试次数用完，跳过该目标')
+        except KeyboardInterrupt:
+            print('\n↩ 已中断当前任务（程序继续运行）')
+        except Exception as e:
+            print(f'❌ 发生未预期的错误（已拦截，程序继续运行）：{type(e).__name__}: {e}')
 
         print('=' * 60)
 
