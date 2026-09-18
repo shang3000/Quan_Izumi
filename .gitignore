@@ -26,7 +26,7 @@ ENV/
 *.swo
 
 # ==================== 下载/产出数据 ====================
-downloads/
+downloads*/
 *.mp4
 *.m4a
 *.webp
@@ -41,6 +41,7 @@ _tmp_query*.py
 # ==================== 敏感凭证（登录态/Cookie，切勿提交） ====================
 taobao_cookie.json
 *cookie*.json
+.bili_cookie
 *.session
 .env
 .env.local
