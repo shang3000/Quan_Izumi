@@ -969,20 +969,62 @@ def run_multi_links(bili, bvids):
 #  Cookie 环节
 # ============================================================
 
+def read_clipboard():
+    """读取 Windows 剪贴板文本（tkinter 优先，powershell 兜底）"""
+    try:
+        import tkinter
+        r = tkinter.Tk()
+        r.withdraw()
+        try:
+            return r.clipboard_get() or ''
+        finally:
+            r.destroy()
+    except Exception:
+        pass
+    try:
+        r = subprocess.run(['powershell', '-NoProfile', '-Command', 'Get-Clipboard'],
+                           capture_output=True, text=True, encoding='utf-8',
+                           errors='replace', timeout=10)
+        if r.returncode == 0:
+            return r.stdout or ''
+    except Exception:
+        pass
+    return ''
+
+
 def ask_cookie(bili):
     print('\n┌─ 登录 Cookie（可选：解锁高画质 + 空间批量接口）──', flush=True)
-    print('│ 未登录：画质最高 480P 左右，空间列表接口容易被风控拦截。', flush=True)
-    print('│ 获取：浏览器登录 bilibili.com → F12 → Application → Cookies', flush=True)
-    print('│      → 复制 SESSDATA 的值（或整串 Cookie 粘进来都行）', flush=True)
+    print('│ 步骤：① 浏览器登录 bilibili.com → F12 → Application → Cookies', flush=True)
+    print('│       ② 复制 SESSDATA 的值（或整串 Cookie）', flush=True)
+    print('│       ③ 回到这里，直接按【回车】← 程序自动从剪贴板读取', flush=True)
     print('└────────────────────────────────────────────────────', flush=True)
     try:
-        raw = ask('Cookie（回车 = 跳过，仍可下载单条视频）> ')
+        raw = ask('复制好 Cookie 后按【回车】读取剪贴板（输入 n 跳过登录）> ')
     except (EOFError, KeyboardInterrupt):
         print(flush=True)
         return
-    if not raw:
-        print('⏭  已跳过登录', flush=True)
-        return
+    # ① 手动粘贴的内容（若粘贴自动回车带进来了）优先使用
+    manual = raw if raw.strip() and raw.strip().lower() != 'n' else ''
+    # ② 否则直接读剪贴板 —— 不经过控制台粘贴，没有自动回车问题
+    if not manual:
+        clip = read_clipboard().strip()
+        if clip and (re.search(r'SESSDATA|bili_jct|buvid3', clip)
+                     or clip.count('=') >= 2):
+            raw = clip
+            print('    · 已从剪贴板读取（没动你的键盘）', flush=True)
+        elif clip:
+            print('    ⚠️  剪贴板里不是 Cookie（可能是别的内容），请重新复制后再按回车',
+                  flush=True)
+            return ask_cookie(bili)
+        else:
+            if raw.strip().lower() == 'n':
+                print('⏭  已跳过登录', flush=True)
+                return
+            print('⏭  剪贴板是空的，已跳过登录（可输入 c 重新设置）', flush=True)
+            return
+    else:
+        raw = manual
+        print('    · 已从手动输入读取', flush=True)
     # 粘贴可能被拆成多行：含 = 的行当作 Cookie 项；都不含 = 则拼成一整段值
     lines = [ln.strip() for ln in raw.split('\n') if ln.strip()]
     kv_lines = [ln for ln in lines if re.match(r'^[A-Za-z_][\w.-]*\s*=', ln)]
