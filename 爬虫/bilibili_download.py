@@ -22,8 +22,8 @@ Bilibili 视频下载器（交互式，支持单条 / UP主空间批量 / 多链
     批量任务列出通用画质阶梯（1080P / 4K / …），服务端无该档时自动回落。
 
 其他：
-    - Cookie 会缓存在同目录 .bili_cookie（和 bilibili_live_record.py 共用，
-      已在 .gitignore 里，不会提交）；有效期过后自动提示重输
+    - Cookie 只在本次运行内使用（输入→校验→内存里用，退出即丢弃），
+      不写入本地文件（B 站 Cookie 会失效，存了反而可能用到过期的）
     - 批量任务带下载档案 downloaded_bilibili.txt，重跑时跳过已下载（断点续传）
     - 单条失败不中断批量；批量每条之间有间隔，降低触发风控的概率
     - 下载 dash 视频/音频流后自动用 ffmpeg 无损合并成 mp4
@@ -75,6 +75,7 @@ UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
 
 REQUEST_INTERVAL = 1.2      # 批量任务中每条视频之间的间隔（秒），降低触发风控概率
+SPACE_PAGE_INTERVAL = 3.0   # 空间投稿翻页间隔（秒）——翻太快必触发 -352 风控
 API_TIMEOUT = 30            # API 读超时（15s 在 CDN 忙时会出现 Read timed out）
 API_RETRIES = 3             # 瞬时网络错误（超时/连接中断）自动重试次数
 CHUNK = 1 << 16
@@ -180,10 +181,22 @@ def save_cookie(cookie):
 
 
 def normalize_cookie(raw):
-    """允许只粘贴 SESSDATA 的值，自动补成 SESSDATA=xxx"""
-    raw = raw.strip().strip('"').strip("'")
+    """
+    把各种姿势的粘贴归一成 SESSDATA=xxx：
+    - 只贴 SESSDATA 的值            → 自动补 SESSDATA=
+    - F12 整行复制（名字和值用 Tab 分隔）→ SESSDATA⇥值 转成 SESSDATA=值
+    - 完整 Cookie 串（含分号）       → 原样保留
+    """
+    raw = raw.strip().strip('"').strip("'").replace('\r', '')
     if not raw:
         return ''
+    # F12 → Application 里复制整行，名字和值之间是 Tab
+    if '\t' in raw:
+        parts = [x.strip() for x in raw.split('\t') if x.strip()]
+        if len(parts) == 2 and '=' not in raw:
+            raw = f'{parts[0]}={parts[1]}'
+        else:
+            raw = ''.join(parts)
     if '=' in raw and ';' in raw:
         return raw
     key = raw.split('=', 1)[0].strip().lower() if '=' in raw else ''
@@ -199,7 +212,7 @@ def normalize_cookie(raw):
 class BiliDownloader:
     """B 站视频下载器（requests + ffmpeg 内核）"""
 
-    def __init__(self, cookie=None):
+    def __init__(self, cookie=None, proxy=None):
         self.cookie = cookie or None
         self.session = requests.Session()
         self.session.headers.update({
@@ -209,22 +222,33 @@ class BiliDownloader:
             'Accept': 'application/json, text/plain, */*',
             'Accept-Language': 'zh-CN,zh;q=0.9',
         })
+        if proxy:
+            # 被风控（-352/-412）时走本地代理换 IP，例如 Clash: http://127.0.0.1:7897
+            self.session.proxies = {'http': proxy, 'https': proxy}
+            print(f'🛡 已启用代理：{proxy}')
         self._mixin = None
         self._mixin_at = 0
-        # 先访问一次主站，拿到 buvid3 等设备 Cookie（缺了会被风控 412）
-        try:
-            self.session.get('https://www.bilibili.com/', timeout=API_TIMEOUT)
-        except requests.RequestException:
-            pass
         if self.cookie:
-            self.session.headers['Cookie'] = self.cookie
+            # 已登录：设备指纹（buvid3 等）用 Cookie 里自带的那套，不再去主站另领，
+            # 避免「匿名 buvid3 + 登录 Cookie」混在一起被风控判定为异常
+            self.set_cookie(self.cookie)
+        else:
+            # 未登录才去主站领 buvid3 设备 Cookie（缺了会被风控 412）
+            try:
+                self.session.get('https://www.bilibili.com/', timeout=API_TIMEOUT)
+            except requests.RequestException:
+                pass
 
     def set_cookie(self, cookie):
+        """Cookie 解析进 cookie jar（真实浏览器就是这么带的，比拼裸 Cookie 头稳）"""
         self.cookie = cookie or None
+        self.session.headers.pop('Cookie', None)
+        self.session.cookies.clear()
         if cookie:
-            self.session.headers['Cookie'] = cookie
-        else:
-            self.session.headers.pop('Cookie', None)
+            for kv in cookie.split(';'):
+                if '=' in kv:
+                    k, v = kv.split('=', 1)
+                    self.session.cookies.set(k.strip(), v.strip(), domain='.bilibili.com')
 
     # ---------- 登录态 ----------
 
@@ -314,6 +338,24 @@ class BiliDownloader:
                       for i, p in enumerate(d.get('pages') or [])],
         }
 
+    def get_w_webid(self, mid):
+        """
+        从 UP 主空间页 HTML 里挖 w_webid。
+        空间投稿接口现在除了 wbi 签名还要求带 w_webid（B 站加的反爬），
+        缺了会返回 -352「风控校验失败」。拿不到时返回空串（靠重试碰运气）。
+        """
+        try:
+            r = self.session.get(f'https://space.bilibili.com/{mid}/video',
+                                 headers={'Referer': 'https://www.bilibili.com/'},
+                                 timeout=API_TIMEOUT)
+            m = (re.search(r'"w_webid":"([^"]+)"', r.text)
+                 or re.search(r'w_webid["\']?\s*[:=]\s*["\']([^"\']+)', r.text))
+            if m:
+                return m.group(1)
+        except requests.RequestException:
+            pass
+        return ''
+
     def get_space_videos(self, mid, limit=None, quiet=False):
         """
         抓 UP 主全部投稿（wbi 签名 + 分页）。返回 [{bvid,title,duration,pages}]
@@ -321,14 +363,39 @@ class BiliDownloader:
         """
         items, page = [], 1
         total = None
+        w_webid = self.get_w_webid(mid)         # 空间页反爬字段，缺了会 -352
         while True:
             params = self._sign({
                 'mid': str(mid), 'order': 'pubdate', 'pn': str(page), 'ps': '30',
-                'platform': 'web', 'web_location': '1550101',
+                'platform': 'web', 'web_location': '1550101', 'w_webid': w_webid,
             })
             r = self._get_json_retry('https://api.bilibili.com/x/space/wbi/arc/search',
                                      params=params,
                                      headers={'Referer': f'https://space.bilibili.com/{mid}/video'})
+            # 风控自救：-352=校验失败 / -412=IP 被封。逐级加码重试：
+            # ① 等 8s 换 w_webid ② 等 15s 再换 ③ 自动接本机代理换 IP 最后一把
+            for wait, use_proxy in ((8, False), (15, False), (10, True)):
+                if r.get('code') not in (-352, -412):
+                    break
+                if use_proxy:
+                    if self.session.proxies:
+                        break                         # 已经在代理上了，再试也没用
+                    clash = detect_clash_proxy()
+                    if not clash:
+                        break                         # 没有代理可用
+                    self.session.proxies = {'http': clash, 'https': clash}
+                    print(f'    🛡 自动改走本机代理 {clash} 换 IP…', flush=True)
+                print(f'    ⚠️  空间接口被风控（{r.get("code")}），等待 {wait}s 后重试…', flush=True)
+                time.sleep(wait)
+                w_webid = self.get_w_webid(mid)
+                r = self._get_json_retry('https://api.bilibili.com/x/space/wbi/arc/search',
+                                         params=self._sign({
+                                             'mid': str(mid), 'order': 'pubdate',
+                                             'pn': str(page), 'ps': '30',
+                                             'platform': 'web', 'web_location': '1550101',
+                                             'w_webid': w_webid,
+                                         }),
+                                         headers={'Referer': f'https://space.bilibili.com/{mid}/video'})
             if r.get('code') != 0:
                 raise RuntimeError(f"空间接口返回 {r.get('code')} "
                                    f"{r.get('message') or ''}".strip())
@@ -352,7 +419,7 @@ class BiliDownloader:
             if limit and len(items) >= limit:
                 break
             page += 1
-            time.sleep(REQUEST_INTERVAL)
+            time.sleep(SPACE_PAGE_INTERVAL)
         # 接口默认最新在前 → 反转成由旧到新（从 UP 主最早的视频开始下）
         items.sort(key=lambda x: x.get('created') or 0)
         if limit:
@@ -417,7 +484,8 @@ class BiliDownloader:
         for i, u in enumerate(urls):
             try:
                 if i:
-                    print(f'    ↻ 换备用节点重试（{i}）…', flush=True)
+                    print(f'    ↻ 主节点连不上（{type(last).__name__}），换备用节点（{i}）…',
+                          flush=True)
                 return self._fetch_one(u, out_path, label)
             except Exception as exc:
                 last = exc
@@ -425,7 +493,9 @@ class BiliDownloader:
 
     def _fetch_one(self, url, out_path, label):
         headers = {'Referer': 'https://www.bilibili.com/', 'Origin': 'https://www.bilibili.com'}
-        with self.session.get(url, headers=headers, stream=True, timeout=(10, 60)) as resp:
+        host = re.sub(r'^https?://', '', url).split('/')[0]
+        print(f'    ⬇ {label}：连接 {host} …', flush=True)
+        with self.session.get(url, headers=headers, stream=True, timeout=(10, 30)) as resp:
             resp.raise_for_status()
             total = int(resp.headers.get('Content-Length') or 0)
             m = re.match(r'bytes \d+-\d+/(\d+)', resp.headers.get('Content-Range') or '')
@@ -716,14 +786,17 @@ def download_one(d, info, page, quality, qn=None, want_stream=None,
     if v is None:
         raise RuntimeError('未取到视频流')
 
-    # 实得画质报告：批量模式下用户选的是「上限」，实际档位以视频自身拥有的为准
-    if want_stream is None:
+    # 实得画质报告（单条模式：报告的是你刚选中的那一档；批量模式：报告实际落档）
+    if v is not None:
         got_qn = v.get('qn') or 0
         got_name = QN_NAME.get(got_qn, f'qn={got_qn}')
-        msg = f'    🎞 实得画质：{got_name}（{v.get("width")}x{v.get("height")}）'
-        if qn and qn < 127 and got_qn < qn:
-            msg += f'　· 该视频最高就这档，未到所选上限 {QN_NAME.get(qn, qn)}'
-        print(msg, flush=True)
+        if want_stream is not None:
+            print(f'    🎞 本次下载画质：{got_name}（{v.get("width")}x{v.get("height")}）', flush=True)
+        else:
+            msg = f'    🎞 实得画质：{got_name}（{v.get("width")}x{v.get("height")}）'
+            if qn and qn < 127 and got_qn < qn:
+                msg += f'　· 该视频最高就这档，未到所选上限 {QN_NAME.get(qn, qn)}'
+            print(msg, flush=True)
 
     if audio_only:
         if not a:
@@ -932,7 +1005,14 @@ def run_space_batch(d, mid):
         items = d.get_space_videos(mid)
     except Exception as exc:
         print(f'❌ 抓取失败：{type(exc).__name__}: {exc}')
-        if not d.cookie:
+        if '-412' in str(exc):
+            print('   🚫 当前 IP 已被 B 站临时拉黑（请求太频繁），继续重试只会延长封禁！')
+            print('   ✅ 解法：退出程序 → 开着 Clash → 运行时加代理参数换个 IP：')
+            print('      python bilibili_download.py --proxy http://127.0.0.1:7897')
+            print('   （或者什么都不做，等 10~30 分钟封禁自动解除）')
+        elif '-352' in str(exc):
+            print('   💡 空间接口被风控：请稍等几分钟再试，或加 --proxy 走 Clash 换 IP')
+        elif not d.cookie:
             print('   💡 空间接口需要登录 Cookie 才稳：按 c 补充 Cookie 后重试')
         print('   （临时替代方案：把视频链接逐条粘进来，一样能批量下载）')
         return
@@ -968,14 +1048,7 @@ def ask_cookie(d):
     d.set_cookie(cookie)
     ok, who = d.login_check()
     if ok:
-        print(f'    ✅ Cookie 有效，已登录：{who}')
-        try:
-            ans = input('    是否记住到本地 .bili_cookie（下次自动读取）？[Y/n] → ').strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            ans = 'n'
-        if ans in ('', 'y', 'yes'):
-            if save_cookie(cookie):
-                print(f'    💾 已保存到 {COOKIE_FILE.name}（已在 .gitignore 中，不会提交）')
+        print(f'    ✅ Cookie 有效，已登录：{who}（仅本次运行有效，不写入本地）')
         return cookie
     print(f'    ⚠️  {who}')
     print('    ⚠️  Cookie 不可用，本次按未登录状态下载（画质与批量都会受限）')
@@ -999,21 +1072,7 @@ def resolve_cookie(d, cli_cookie='', no_prompt=False):
         print('[Cookie] 已按 --no-cookie 跳过登录（画质与批量受限）')
         return None
 
-    saved = load_saved_cookie()
-    if saved:
-        d.set_cookie(saved)
-        ok, who = d.login_check()
-        if ok:
-            print(f'[Cookie] 已自动读取 {COOKIE_FILE.name}，登录用户：{who}')
-            return saved
-        print(f'[Cookie] ⚠️  本地 Cookie 已失效（{who}）')
-        d.set_cookie(None)
-        try:
-            ans = input('   是否重新输入 Cookie？[Y/n] → ').strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            ans = 'n'
-        if ans not in ('', 'y', 'yes'):
-            return None
+    # 不读写本地 Cookie 文件：Cookie 只在本次运行内使用，退出即丢弃
     return ask_cookie(d)
 
 
@@ -1097,6 +1156,18 @@ def print_banner():
     print()
 
 
+def detect_clash_proxy():
+    """自动探测本机常见代理端口（Clash 等），活着就借它换 IP 绕风控"""
+    import socket
+    for port in (7897, 7890, 7899, 10809):
+        try:
+            with socket.create_connection(('127.0.0.1', port), timeout=0.3):
+                return f'http://127.0.0.1:{port}'
+        except OSError:
+            continue
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='B 站视频下载器（单条 / UP主空间批量 / 多链接批量）',
@@ -1109,6 +1180,9 @@ def main():
     parser.add_argument('--cookie', default=os.environ.get('BILI_COOKIE', ''),
                         help='登录 Cookie（也可用环境变量 BILI_COOKIE）')
     parser.add_argument('--no-cookie', action='store_true', help='跳过 Cookie 询问，按未登录下载')
+    parser.add_argument('--proxy', default=os.environ.get('BILI_PROXY', ''),
+                        help='HTTP 代理（如 http://127.0.0.1:7897），遇到 -352/-412 风控时用它换 IP')
+    parser.add_argument('--no-proxy', action='store_true', help='禁用自动代理探测，强制直连')
     args = parser.parse_args()
 
     if not has_ffmpeg():
@@ -1118,7 +1192,9 @@ def main():
     TEMP_ROOT.mkdir(parents=True, exist_ok=True)
 
     print_banner()
-    d = BiliDownloader()
+    # 默认直连（家宽 IP 最干净）；只有 --proxy 手动指定才在启动时挂代理。
+    # 直连途中被风控的话，抓取流程会自动接本机 Clash 换 IP 重试。
+    d = BiliDownloader(proxy=args.proxy or None)
     resolve_cookie(d, args.cookie, args.no_cookie)
     print()
 
