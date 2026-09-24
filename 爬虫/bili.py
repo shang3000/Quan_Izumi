@@ -26,12 +26,14 @@ except Exception:
 import os
 import re
 import time
+import queue
 import random
 import shutil
 import hashlib
 import argparse
 import socket
 import string
+import threading
 import subprocess
 import urllib.parse
 from pathlib import Path
@@ -125,6 +127,49 @@ def parse_length(text):
 
 def has_ffmpeg():
     return shutil.which('ffmpeg') is not None
+
+
+# ---------- 防粘贴输入 ----------
+
+_PUMP = {'q': None, 'eof': False}
+
+
+def _stdin_pump(q):
+    """后台线程：持续把 stdin 的行放进队列"""
+    try:
+        for line in sys.stdin:
+            q.put(line)
+    except Exception:
+        pass
+    q.put(None)
+
+
+def ask(prompt, settle=0.45):
+    """
+    防粘贴版 input()：
+    - 粘贴的内容常自带换行（等于自动回车）或多行碎片
+    - 这里持续吸收所有立刻到达的行，直到静默 settle 秒才返回
+    - 自动丢弃空行，绝不让粘贴把流程"顶"过去
+    """
+    print(prompt, end='', flush=True)
+    if _PUMP['q'] is None:
+        _PUMP['q'] = queue.Queue()
+        threading.Thread(target=_stdin_pump, args=(_PUMP['q'],), daemon=True).start()
+    lines = []
+    while True:
+        if _PUMP['eof'] and _PUMP['q'].empty():
+            break
+        try:
+            item = _PUMP['q'].get() if not lines else _PUMP['q'].get(timeout=settle)
+        except queue.Empty:
+            break
+        if item is None:
+            _PUMP['eof'] = True
+            break
+        lines.append(item.rstrip('\r\n'))
+    if not lines:
+        raise EOFError
+    return '\n'.join(ln for ln in lines if ln.strip())
 
 
 def detect_local_proxy():
@@ -563,7 +608,7 @@ def menu_single(play, duration):
 
     while True:
         try:
-            c = input(f'   选择 [0-{len(rows)}/a/q] > ').strip().lower()
+            c = ask(f'   选择 [0-{len(rows)}/a/q] > ').split('\n')[0].strip().lower()
         except (EOFError, KeyboardInterrupt):
             print()
             return 'quit', None
@@ -589,7 +634,7 @@ def menu_batch():
     print('   a. 仅音频 mp3   q. 放弃本次批量')
     while True:
         try:
-            c = input(f'   选择 [0-{len(BATCH_LADDER)}/a/q] > ').strip().lower()
+            c = ask(f'   选择 [0-{len(BATCH_LADDER)}/a/q] > ').split('\n')[0].strip().lower()
         except (EOFError, KeyboardInterrupt):
             print()
             return 'quit', None
@@ -763,7 +808,7 @@ def run_single(bili, bvid):
         print('   a. 全部分P   q. 放弃')
         while True:
             try:
-                c = input(f'   选择 [1-{len(pages)}/a/q] > ').strip().lower()
+                c = ask(f'   选择 [1-{len(pages)}/a/q] > ').split('\n')[0].strip().lower()
             except (EOFError, KeyboardInterrupt):
                 print()
                 return
@@ -931,13 +976,22 @@ def ask_cookie(bili):
     print('│      → 复制 SESSDATA 的值（或整串 Cookie 粘进来都行）', flush=True)
     print('└────────────────────────────────────────────────────', flush=True)
     try:
-        raw = input('Cookie（回车 = 跳过，仍可下载单条视频）> ').strip()
+        raw = ask('Cookie（回车 = 跳过，仍可下载单条视频）> ')
     except (EOFError, KeyboardInterrupt):
         print(flush=True)
         return
     if not raw:
         print('⏭  已跳过登录', flush=True)
         return
+    # 粘贴可能被拆成多行：含 = 的行当作 Cookie 项；都不含 = 则拼成一整段值
+    lines = [ln.strip() for ln in raw.split('\n') if ln.strip()]
+    kv_lines = [ln for ln in lines if re.match(r'^[A-Za-z_][\w.-]*\s*=', ln)]
+    if len(lines) > 1 and kv_lines:
+        raw = '; '.join(kv_lines)
+    elif kv_lines:
+        raw = kv_lines[0] if len(kv_lines) == 1 else '; '.join(kv_lines)
+    else:
+        raw = ''.join(lines)
     # 回执：粘贴时控制台经常不回显，主动打印收到的东西让用户核对
     print(f'    · 收到输入：共 {len(raw)} 字符', flush=True)
     print(f'    · 开头：「{raw[:30]}」', flush=True)
@@ -1059,11 +1113,14 @@ def main():
 
     while True:
         try:
-            text = input('📥 请输入链接 / BV 号 / UP主空间（q 退出）> ').strip()
+            text = ask('📥 请输入链接 / BV 号 / UP主空间（q 退出）> ')
         except (EOFError, KeyboardInterrupt):
             print('\n再见！')
             break
-        if not text:
+        text = text.replace('\n', ' ').strip()
+        if 'SESSDATA' in text or (text.count('=') >= 3 and 'BV' not in text
+                                  and 'space.bilibili.com' not in text):
+            print('  💡 这看起来是 Cookie 不是链接——输入 c 可重新设置 Cookie；请粘贴视频/空间链接')
             continue
         try:
             if not handle_input(bili, text):
