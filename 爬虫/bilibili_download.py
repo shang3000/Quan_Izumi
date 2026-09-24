@@ -90,7 +90,7 @@ QN_NAME = {
     100: '智能修复', 80: '1080P 高清', 74: '720P 60帧',
     64: '720P 高清', 32: '480P 清晰', 16: '360P 流畅', 6: '240P 极速',
 }
-# 批量任务的通用画质阶梯（从高到低，服务端没有该档会自动回落）
+# 批量任务的画质上限阶梯（从高到低；每条视频实际取「不超过上限的最高可用档」）
 BATCH_LADDER = [127, 120, 116, 112, 80, 74, 64, 32, 16]
 
 # wbi 签名用的混淆表（B 站前端固定常量）
@@ -578,9 +578,11 @@ def choose_quality_single(play_info, duration):
 
 
 def choose_quality_batch():
-    """批量任务：通用画质阶梯菜单。返回 ('video', qn) / ('audio', None) / ('quit', None)"""
-    print('\n🎛  请选择画质（批量任务统一使用）：')
-    print('   0. 最佳画质（服务端支持的最高档，回车默认）')
+    """批量任务：画质上限菜单。返回 ('video', qn) / ('audio', None) / ('quit', None)"""
+    print('\n🎛  请选择画质上限（批量任务统一使用）：')
+    print('   ℹ️  每个视频实际拥有的档位不同（有的最高 1080P，有的只有 720P），')
+    print('      会自动取「不超过上限的实际最高档」，下载时逐条报告实得画质。')
+    print('   0. 不设上限（每条视频都取它自己的最高档，回车默认）')
     for i, qn in enumerate(BATCH_LADDER, 1):
         print(f'   {i}. {QN_NAME.get(qn, qn)}')
     print('   a. 仅音频 mp3   q. 放弃本次批量')
@@ -703,6 +705,8 @@ def download_one(d, info, page, quality, qn=None, want_stream=None,
         seg = (play.get('segments') or [None])[0]
         if not seg:
             raise RuntimeError('没有可用分片')
+        got = play.get('quality')
+        print(f'    🎞 实得画质：{QN_NAME.get(got, got or "?")}', flush=True)
         out = OUTPUT_DIR / f'{out_stem}.mp4'
         d.fetch(seg['url'], out, '本片', seg.get('backup'))
         if audio_only and has_ffmpeg():
@@ -711,6 +715,15 @@ def download_one(d, info, page, quality, qn=None, want_stream=None,
 
     if v is None:
         raise RuntimeError('未取到视频流')
+
+    # 实得画质报告：批量模式下用户选的是「上限」，实际档位以视频自身拥有的为准
+    if want_stream is None:
+        got_qn = v.get('qn') or 0
+        got_name = QN_NAME.get(got_qn, f'qn={got_qn}')
+        msg = f'    🎞 实得画质：{got_name}（{v.get("width")}x{v.get("height")}）'
+        if qn and qn < 127 and got_qn < qn:
+            msg += f'　· 该视频最高就这档，未到所选上限 {QN_NAME.get(qn, qn)}'
+        print(msg, flush=True)
 
     if audio_only:
         if not a:
@@ -849,7 +862,7 @@ def run_batch(d, items, title):
         return
     audio_only = quality == 'audio'
 
-    print(f'\n⬇ 开始批量下载（{"仅音频 mp3" if audio_only else QN_NAME.get(qn, qn)}）…')
+    print(f'\n⬇ 开始批量下载（{"仅音频 mp3" if audio_only else "画质上限：" + QN_NAME.get(qn, str(qn))}，逐条取实际最高档）…')
     ok = fail = 0
     failed_items = []
     for i, x in enumerate(todo, 1):
