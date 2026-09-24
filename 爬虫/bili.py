@@ -1,32 +1,19 @@
 """
-B 站视频下载器（全新重写版）
+B 站下载器（bili.py）
 
-交互风格与 YouTube-downloader.py 一致：
-    运行 → 显示保存目录 → 粘贴 Cookie（可选）→ 循环接收输入 → 弹画质菜单 → 下载
+运行 → 粘贴 Cookie → 输入链接 → 选画质 → 下载
 
 支持的输入：
-    1. 单个视频：BV 号 / 视频链接 / b23 短链（长短视频通吃）
-    2. UP 主空间：https://space.bilibili.com/xxxx  ← 一键抓全部投稿（按从旧到新的顺序下载）
-    3. 多链接批量：一行里放多个 BV / 链接（空格、逗号、分号分隔）
-    4. CDN 直链：F12 Network 里复制的 upos-/bilivideo 直链
+    1. 单视频      BV 号 / 视频链接 / b23 短链
+    2. UP主空间    https://space.bilibili.com/xxxx（一键全部投稿，从旧到新）
+    3. 多链接批量  一行多个链接/BV号（空格、逗号分隔）
+    4. CDN 直链    F12 复制的 upos-/bilivideo 直链
 
-画质规则（重点）：
-    - 单条视频：菜单列出「该视频真实可用的画质」（含帧率/编码/体积估算），
-      选哪档就下哪档，下载前明示「本次下载画质」
-    - 批量任务：菜单选「画质上限」，每条视频自动取「不超过上限的实际最高档」，
-      逐条报告实得画质（有 1080P 下 1080P，只有 720P 下 720P）
+画质规则：
+    单视频   菜单 = 该视频真实拥有的档位，选哪档下哪档，下完报告实得画质
+    批量     菜单 = 画质上限，每条自动取不超过上限的实际最高档，逐条报告
 
-风控对策（今天踩坑的总结，全部内置）：
-    - 空间接口带 w_webid（从空间页 HTML 提取）+ wbi 签名，缺了会 -352
-    - 默认直连（家宽 IP 最干净）；启动时不碰任何代理
-    - 翻页间隔 3 秒（翻太快必触发 -352）
-    - 遇 -352/-412 自救三连：等 8s 换 w_webid 重试 → 等 15s 再试 →
-      自动借本机代理（Clash 7897/7890 等）换 IP 最后一把
-    - Cookie 只在本次运行内使用，不读写本地文件
-
-用法：
-    python bilibili_download.py                    # 交互式（推荐，PyCharm 直接 Run）
-    python bilibili_download.py BV1xx411c7mD       # 直接下这一条
+Cookie：只存本次运行内存，绝不写盘。只贴 SESSDATA 值也行（自动补齐设备指纹）。
 """
 
 import sys
@@ -39,7 +26,6 @@ except Exception:
 import os
 import re
 import time
-import json
 import random
 import shutil
 import hashlib
@@ -53,50 +39,46 @@ from pathlib import Path
 try:
     import requests
 except ImportError:
-    print('缺少 requests，请在项目虚拟环境里安装：')
-    print('    .venv/Scripts/python.exe -m pip install requests')
+    print('缺少 requests，请用项目虚拟环境运行本脚本')
     sys.exit(1)
 
-
 # ============================================================
-#  配置区
+#  配置
 # ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = BASE_DIR / 'downloads'
 TEMP_ROOT = OUTPUT_DIR / '.temp'
-ARCHIVE_FILE = BASE_DIR / 'downloaded_bilibili.txt'   # 下载档案（断点续传）
+ARCHIVE_FILE = BASE_DIR / 'downloaded_bilibili.txt'
 
 UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
 
-API_TIMEOUT = 30          # API 读超时
-API_RETRIES = 3           # 网络抖动重试次数
-VIDEO_INTERVAL = 1.5      # 批量下载：每条视频之间隔多久
-PAGE_INTERVAL = 3.0       # 空间翻页：每页之间隔多久（翻太快必 -352）
+API_TIMEOUT = 30
+API_RETRIES = 3
+VIDEO_INTERVAL = 1.5     # 批量：两条视频之间的间隔
+PAGE_INTERVAL = 3.0      # 空间翻页间隔（翻太快必触发风控）
 CHUNK = 1 << 16
-PROGRESS_STEP = 3.0       # 下载进度每几秒打一行
+PROGRESS_STEP = 3.0
 
-# 本机常见代理端口（仅直连被风控后的兜底自救才会用）
-PROXY_PORTS = [7897, 7890, 7891, 10809]
+PROXY_PORTS = [7897, 7890, 7891, 10809]   # 兜底自救用的本机代理端口
 
-# 画质编号 → 名称（B 站 qn 映射）
 QN_NAME = {
     127: '8K 超高清', 126: '杜比视界', 125: 'HDR 真彩',
     120: '4K 超清', 116: '1080P 60帧', 112: '1080P 高码率',
     100: '智能修复', 80: '1080P 高清', 74: '720P 60帧',
     64: '720P 高清', 32: '480P 清晰', 16: '360P 流畅', 6: '240P 极速',
 }
-# 批量任务的画质上限阶梯（从高到低）
 BATCH_LADDER = [127, 120, 116, 112, 80, 74, 64, 32, 16]
 
-# wbi 签名混淆表（B 站前端固定常量）
 MIXIN_TAB = [
     46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35,
     27, 43, 5, 49, 33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13,
     37, 48, 7, 16, 24, 55, 40, 61, 26, 17, 0, 1, 60, 51, 30, 4,
     22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11, 36, 20, 34, 44, 52,
 ]
+
+DEVICE_KEYS = ('buvid3', 'buvid4', 'b_nut', 'buvid_fp', 'LIVE_BUVID', 'b_lsid')
 
 
 # ============================================================
@@ -125,7 +107,7 @@ def sanitize(name, max_len=60):
 
 
 def parse_length(text):
-    """把 "1:44" / "1:02:03" 解析成秒"""
+    """'1:44' / '1:02:03' → 秒"""
     if not text:
         return 0
     text = str(text).strip()
@@ -146,7 +128,6 @@ def has_ffmpeg():
 
 
 def detect_local_proxy():
-    """探测本机代理端口（仅在直连被风控后的兜底自救时调用）"""
     for port in PROXY_PORTS:
         try:
             with socket.create_connection(('127.0.0.1', port), timeout=0.3):
@@ -157,7 +138,6 @@ def detect_local_proxy():
 
 
 def progress_printer(label, total_bytes):
-    """每 PROGRESS_STEP 秒打一行进度（不用 \\r，PyCharm 控制台友好）"""
     state = {'t': time.time(), 'start': time.time(), 'last': -1}
 
     def update(done):
@@ -178,10 +158,6 @@ def progress_printer(label, total_bytes):
 
     return update
 
-
-# ============================================================
-#  输入解析
-# ============================================================
 
 def extract_bvids(text):
     out = []
@@ -206,10 +182,10 @@ def is_cdn_url(text):
 
 def normalize_cookie(raw):
     """
-    各种粘贴姿势归一成完整 Cookie 串：
-    - 只贴 SESSDATA 的值 → 自动补 SESSDATA=
-    - F12 复制的 Tab 分隔行 → 补成 k=v
-    - 完整 Cookie 串 → 原样保留
+    粘贴姿势归一：
+    - 只贴 SESSDATA 的值 → 补 SESSDATA=
+    - F12 的 Tab 分隔行 → 补成 k=v
+    - 完整 Cookie 串 → 原样
     """
     raw = raw.strip().strip('"').strip("'").replace('\r', '')
     if not raw:
@@ -249,19 +225,42 @@ class Bili:
         if cookie:
             self.set_cookie(cookie)
         else:
-            # 未登录：先访问主站领设备 Cookie（buvid3，缺了会被 412）
-            try:
-                self.session.get('https://www.bilibili.com/', timeout=API_TIMEOUT)
-            except requests.RequestException:
-                pass
+            self._visit_homepage()
 
-    # ---------- Cookie / 代理 ----------
+    def _visit_homepage(self):
+        try:
+            self.session.get('https://www.bilibili.com/', timeout=API_TIMEOUT)
+        except requests.RequestException:
+            pass
+
+    # ---------- Cookie ----------
+
+    def set_cookie(self, cookie):
+        """
+        Cookie 解析进 cookie jar（和真实浏览器一致）。
+        只贴 SESSDATA 时必须保住/补齐设备指纹（buvid3），否则空间接口必被风控。
+        """
+        device_old = {c.name: c.value for c in self.session.cookies
+                      if c.name in DEVICE_KEYS}
+        self.session.headers.pop('Cookie', None)
+        self.session.cookies.clear()
+        if cookie:
+            for kv in cookie.split(';'):
+                if '=' in kv:
+                    k, v = kv.split('=', 1)
+                    self.session.cookies.set(k.strip(), v.strip(), domain='.bilibili.com')
+        if 'buvid3' not in {c.name for c in self.session.cookies}:
+            self._ensure_device_cookies()
+        have = {c.name for c in self.session.cookies}
+        for k, v in device_old.items():
+            if k not in have:
+                self.session.cookies.set(k, v, domain='.bilibili.com')
 
     def _ensure_device_cookies(self):
-        """确保 jar 里有设备指纹（buvid3）——空间接口没有它直接 -412/-352"""
+        """确保 jar 里有设备指纹 buvid3 —— 空间接口没有它直接 -412/-352"""
         if 'buvid3' in {c.name for c in self.session.cookies}:
             return
-        # 方式一：B 站设备指纹接口直接领（最稳）
+        # 方式一：B 站指纹接口直接领（最稳）
         try:
             r = self.session.get('https://api.bilibili.com/x/frontend/finger/spi',
                                  timeout=API_TIMEOUT).json()
@@ -274,42 +273,7 @@ class Bili:
             pass
         # 方式二：访问主站碰 Set-Cookie 兜底
         if 'buvid3' not in {c.name for c in self.session.cookies}:
-            try:
-                self.session.get('https://www.bilibili.com/', timeout=API_TIMEOUT)
-            except requests.RequestException:
-                pass
-
-    def set_cookie(self, cookie):
-        """
-        Cookie 解析进 cookie jar。
-        注意：只贴 SESSDATA 时必须补齐设备指纹（buvid3 等），否则空间接口必 -412/-352。
-        """
-        # 留存旧 jar 里的设备指纹
-        device_old = {c.name: c.value for c in self.session.cookies
-                      if c.name in ('buvid3', 'buvid4', 'b_nut', 'buvid_fp',
-                                    'LIVE_BUVID', 'b_lsid')}
-        self.session.headers.pop('Cookie', None)
-        self.session.cookies.clear()
-        if cookie:
-            for kv in cookie.split(';'):
-                if '=' in kv:
-                    k, v = kv.split('=', 1)
-                    self.session.cookies.set(k.strip(), v.strip(), domain='.bilibili.com')
-        # 用户 Cookie 里没有 buvid3 → 自动领一份（设备指纹是风控必查项）
-        if 'buvid3' not in {c.name for c in self.session.cookies}:
-            self._ensure_device_cookies()
-        # 再把旧 jar 里仍然缺的设备 Cookie 补回去
-        have = {c.name for c in self.session.cookies}
-        for k, v in device_old.items():
-            if k not in have:
-                self.session.cookies.set(k, v, domain='.bilibili.com')
-
-    def use_proxy(self, proxy):
-        self.proxy = proxy
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
-        else:
-            self.session.proxies = {}
+            self._visit_homepage()
 
     def login_name(self):
         """返回登录用户名；未登录/无效返回 None"""
@@ -320,6 +284,13 @@ class Bili:
             return d.get('uname') if d.get('isLogin') else None
         except Exception:
             return None
+
+    def use_proxy(self, proxy):
+        self.proxy = proxy
+        if proxy:
+            self.session.proxies = {'http': proxy, 'https': proxy}
+        else:
+            self.session.proxies = {}
 
     # ---------- wbi 签名 ----------
 
@@ -342,14 +313,35 @@ class Bili:
         p = dict(params)
         p['wts'] = str(int(time.time()))
         p.setdefault('dm_img_list', '[]')
-        p.setdefault('dm_img_str', ''.join(random.choices(string.ascii_lowercase + string.digits, k=8)))
-        p.setdefault('dm_cover_img_str', ''.join(random.choices(string.ascii_lowercase + string.digits, k=8)))
+        p.setdefault('dm_img_str', ''.join(random.choices(
+            string.ascii_lowercase + string.digits, k=8)))
+        p.setdefault('dm_cover_img_str', ''.join(random.choices(
+            string.ascii_lowercase + string.digits, k=8)))
         p.setdefault('dm_img_inter', '{"ds":[],"wh":[0,0,0],"of":[0,0,0]}')
         p = dict(sorted(p.items()))
         clean = {k: re.sub(r"[!'()*]", '', str(v)) for k, v in p.items()}
         query = urllib.parse.urlencode(clean)
         p['w_rid'] = hashlib.md5((query + self._mixin_key()).encode()).hexdigest()
         return p
+
+    def _get_json(self, url, *, params=None, headers=None):
+        """GET JSON，网络抖动自动重试"""
+        last = None
+        for attempt in range(1, API_RETRIES + 1):
+            try:
+                r = self.session.get(url, params=params, headers=headers,
+                                     timeout=API_TIMEOUT)
+                return r.json()
+            except (requests.Timeout, requests.ConnectionError) as exc:
+                last = exc
+                if attempt < API_RETRIES:
+                    wait = 3 * attempt
+                    print(f'    ⚠️  网络抖动（{type(exc).__name__}），{wait}s 后重试…',
+                          flush=True)
+                    time.sleep(wait)
+        raise last
+
+    # ---------- 空间投稿 ----------
 
     def _get_w_webid(self, mid):
         """从空间页 HTML 提取 w_webid（空间接口反爬字段，缺了 -352）"""
@@ -365,47 +357,37 @@ class Bili:
             pass
         return ''
 
-    def _get_json(self, url, *, params=None, headers=None):
-        """GET JSON，网络抖动自动重试；返回解析后的 dict"""
-        last = None
-        for attempt in range(1, API_RETRIES + 1):
-            try:
-                r = self.session.get(url, params=params, headers=headers,
-                                     timeout=API_TIMEOUT)
-                return r.json()
-            except (requests.Timeout, requests.ConnectionError) as exc:
-                last = exc
-                if attempt < API_RETRIES:
-                    wait = 3 * attempt
-                    print(f'    ⚠️  网络抖动（{type(exc).__name__}），{wait}s 后重试…', flush=True)
-                    time.sleep(wait)
-        raise last
-
-    # ---------- 空间投稿 ----------
+    def _space_page(self, mid, page, w_webid):
+        return self._get_json(
+            'https://api.bilibili.com/x/space/wbi/arc/search',
+            params=self._sign({'mid': str(mid), 'order': 'pubdate', 'pn': str(page),
+                               'ps': '30', 'platform': 'web', 'web_location': '1550101',
+                               'w_webid': w_webid}),
+            headers={'Referer': f'https://space.bilibili.com/{mid}/video'})
 
     def space_videos(self, mid):
         """
         抓 UP 主全部投稿，按发布时间「从旧到新」排序返回。
-        自带风控自救：-352/-412 → 等 8s 重试 → 等 15s 重试 → 借本机代理换 IP
+        风控自救：-352/-412 → 等 8s 换 w_webid → 等 15s → 借本机代理换 IP
         """
         items, page = [], 1
         total = None
         w_webid = self._get_w_webid(mid)
         while True:
             r = self._space_page(mid, page, w_webid)
-            # ---- 风控自救三连（逐级加码）----
             for wait, use_proxy in ((8, False), (15, False), (10, True)):
                 if r.get('code') not in (-352, -412):
                     break
                 if use_proxy:
                     if self.proxy:
-                        break                     # 已经在代理上，没法再换
+                        break
                     clash = detect_local_proxy()
                     if not clash:
-                        break                     # 本机没有代理可用
+                        break
                     self.use_proxy(clash)
                     print(f'    🛡 自动改走本机代理 {clash} 换 IP…', flush=True)
-                print(f'    ⚠️  空间接口被风控（{r.get("code")}），等待 {wait}s 后重试…', flush=True)
+                print(f'    ⚠️  空间接口被风控（{r.get("code")}），'
+                      f'等待 {wait}s 后重试…', flush=True)
                 time.sleep(wait)
                 w_webid = self._get_w_webid(mid)
                 r = self._space_page(mid, page, w_webid)
@@ -427,17 +409,9 @@ class Bili:
             if len(vlist) < 30:
                 break
             page += 1
-            time.sleep(PAGE_INTERVAL)             # 翻太快必触发 -352
+            time.sleep(PAGE_INTERVAL)
         items.sort(key=lambda x: x['created'])    # 接口最新在前 → 反转成从旧到新
         return items
-
-    def _space_page(self, mid, page, w_webid):
-        return self._get_json(
-            'https://api.bilibili.com/x/space/wbi/arc/search',
-            params=self._sign({'mid': str(mid), 'order': 'pubdate', 'pn': str(page),
-                               'ps': '30', 'platform': 'web', 'web_location': '1550101',
-                               'w_webid': w_webid}),
-            headers={'Referer': f'https://space.bilibili.com/{mid}/video'})
 
     def uploader_name(self, mid):
         try:
@@ -505,7 +479,8 @@ class Bili:
         for i, u in enumerate([url] + list(backup or [])):
             try:
                 if i:
-                    print(f'    ↻ 主节点连不上（{type(last).__name__}），换备用节点…', flush=True)
+                    print(f'    ↻ 主节点连不上（{type(last).__name__}），换备用节点…',
+                          flush=True)
                 return self._fetch_one(u, out_path, label)
             except Exception as exc:
                 last = exc
@@ -520,7 +495,8 @@ class Bili:
                               timeout=(10, 30)) as resp:
             resp.raise_for_status()
             total = int(resp.headers.get('Content-Length') or 0)
-            m = re.match(r'bytes \d+-\d+/(\d+)', resp.headers.get('Content-Range') or '')
+            m = re.match(r'bytes \d+-\d+/(\d+)',
+                         resp.headers.get('Content-Range') or '')
             if m:
                 total = int(m.group(1))
             update = progress_printer(label, total)
@@ -542,7 +518,7 @@ class Bili:
 # ============================================================
 
 def group_streams(video_streams, duration):
-    """按画质档位归并（同档优先 avc 编码），返回 [(qn, stream, 估算体积)] 从高到低"""
+    """同档位归并（优先 avc 编码），返回 [(qn, stream, 估算体积)] 从高到低"""
     best = {}
     for s in video_streams:
         qn = s.get('qn')
@@ -562,10 +538,7 @@ def group_streams(video_streams, duration):
 
 
 def menu_single(play, duration):
-    """
-    单条视频：列出「真实可用画质」让用户选。
-    返回 ('video', stream) / ('audio', None) / ('quit', None)
-    """
+    """单视频：列出真实可用档位。返回 ('video', stream) / ('audio', None) / ('quit', None)"""
     if play['format'] == 'durl':
         print('\n🎛  该视频只有渐进式流，无法选画质，将直接下载')
         return 'video', None
@@ -606,7 +579,7 @@ def menu_single(play, duration):
 
 
 def menu_batch():
-    """批量任务：选画质上限。返回 ('video', qn) / ('audio', None) / ('quit', None)"""
+    """批量：选画质上限。返回 ('video', qn) / ('audio', None) / ('quit', None)"""
     print('\n🎛  请选择画质上限（批量任务统一使用）：')
     print('   ℹ️  每条视频实际档位不同，会自动取「不超过上限的实际最高档」，')
     print('      下载时逐条报告实得画质。')
@@ -632,7 +605,7 @@ def menu_batch():
 
 
 def pick_stream(play, qn=None, want=None):
-    """挑要下载的视频/音频流。want=单条模式选定的流；qn=批量模式上限"""
+    """挑要下载的视频/音频流。want=单条模式选定流；qn=批量模式上限"""
     if play['format'] == 'durl':
         return None, None
     v = want
@@ -696,14 +669,14 @@ def to_mp3(src_path, out_path):
 
 def report_saved(path):
     if path and path.exists():
-        print(f'💾 已保存：{path}（{human_size(path.stat().st_size)}）')
+        print(f'💾 已保存：{path}（{human_size(path.stat().st_size)}）', flush=True)
 
 
 def quality_report(stream, qn_cap=None):
-    """打印实得画质；批量模式下若未到上限会说明"""
     got = (stream or {}).get('qn') or 0
     name = QN_NAME.get(got, f'qn={got}')
-    msg = f'    🎞 实得画质：{name}（{(stream or {}).get("width")}x{(stream or {}).get("height")}）'
+    msg = (f'    🎞 实得画质：{name}'
+           f'（{(stream or {}).get("width")}x{(stream or {}).get("height")}）')
     if qn_cap and qn_cap < 127 and got < qn_cap:
         msg += f'　· 该视频最高就这档，未到上限 {QN_NAME.get(qn_cap, qn_cap)}'
     print(msg, flush=True)
@@ -840,7 +813,6 @@ def run_single(bili, bvid):
 # ---------- 批量 ----------
 
 def run_batch(bili, items, title):
-    """items: [{'bvid','title','duration'}]；已下载的按档案跳过；单条失败不中断"""
     archive = archive_load()
     todo = [x for x in items if x['bvid'] not in archive]
     skipped = len(items) - len(todo)
@@ -884,7 +856,6 @@ def run_batch(bili, items, title):
             print(f'   ❌ 失败：{type(exc).__name__}: {exc}')
         time.sleep(VIDEO_INTERVAL)
 
-    # 失败补抓一轮
     if failed_items:
         print(f'\n🔁 有 {len(failed_items)} 条失败，稍候自动重试一轮…')
         time.sleep(3)
@@ -967,20 +938,23 @@ def ask_cookie(bili):
     if not raw:
         print('⏭  已跳过登录', flush=True)
         return
-    # 回执：粘贴时控制台经常不回显，这里主动打印收到的东西让用户核对
+    # 回执：粘贴时控制台经常不回显，主动打印收到的东西让用户核对
     print(f'    · 收到输入：共 {len(raw)} 字符', flush=True)
     print(f'    · 开头：「{raw[:30]}」', flush=True)
     print(f'    · 结尾：「{raw[-20:]}」', flush=True)
     bili.set_cookie(normalize_cookie(raw))
     cookie_names = sorted({k.split('=')[0].strip() for k in raw.split(';') if '=' in k})
     if cookie_names:
-        print(f'    · 解析出 {len(cookie_names)} 个 Cookie 项：{"、".join(cookie_names)}', flush=True)
+        print(f'    · 解析出 {len(cookie_names)} 个 Cookie 项：'
+              f'{"、".join(cookie_names)}', flush=True)
     who = bili.login_name()
     if who:
-        print(f'    ✅ Cookie 有效，已登录：{who}（仅本次运行有效，不写入本地）', flush=True)
+        print(f'    ✅ Cookie 有效，已登录：{who}（仅本次运行有效，不写入本地）',
+              flush=True)
     else:
         print('    ⚠️  Cookie 无效或已过期，本次按未登录下载', flush=True)
-        print('    💡 检查上面「开头/结尾」是否完整；建议只复制 SESSDATA 的值粘贴（短，不会被截断）', flush=True)
+        print('    💡 检查上面「开头/结尾」是否完整；建议只复制 SESSDATA 的值粘贴',
+              flush=True)
         bili.set_cookie('')
 
 
@@ -1032,7 +1006,7 @@ def handle_input(bili, text):
 
 def print_banner():
     print('=' * 62)
-    print('  📺 B 站视频下载器  🅁 v2.2-cookie回执版 (09-24 21:12)')
+    print('  📺 B 站下载器（bili.py）')
     print('=' * 62)
     print(f'保存目录：{OUTPUT_DIR}')
     print()
@@ -1049,7 +1023,7 @@ def print_banner():
 
 def main():
     parser = argparse.ArgumentParser(
-        description='B 站视频下载器（单条 / UP主空间批量 / 多链接批量）')
+        description='B 站下载器（单条 / UP主空间批量 / 多链接批量）')
     parser.add_argument('targets', nargs='*',
                         help='视频链接 / BV 号 / UP主空间链接（可多个）')
     parser.add_argument('--cookie', default=os.environ.get('BILI_COOKIE', ''),
@@ -1071,14 +1045,14 @@ def main():
         bili.set_cookie(normalize_cookie(args.cookie))
         who = bili.login_name()
         if who:
-            print(f'[Cookie] 已登录：{who}')
+            print(f'[Cookie] 已登录：{who}', flush=True)
         else:
-            print('[Cookie] ⚠️  命令行 Cookie 无效 → 改为询问')
+            print('[Cookie] ⚠️  命令行 Cookie 无效 → 改为询问', flush=True)
             bili.set_cookie('')
             ask_cookie(bili)
     elif not args.no_cookie:
         ask_cookie(bili)
-    print()
+    print(flush=True)
 
     for t in args.targets:
         handle_input(bili, t)
@@ -1098,7 +1072,8 @@ def main():
         except KeyboardInterrupt:
             print('\n↩ 已中断当前任务（程序继续运行）')
         except Exception as exc:
-            print(f'❌ 发生未预期的错误（已拦截，程序继续运行）：{type(exc).__name__}: {exc}')
+            print(f'❌ 发生未预期的错误（已拦截，程序继续运行）：'
+                  f'{type(exc).__name__}: {exc}')
         print('=' * 62)
 
 
