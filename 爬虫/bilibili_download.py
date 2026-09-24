@@ -1032,7 +1032,7 @@ def handle_input(bili, text):
 
 def print_banner():
     print('=' * 62)
-    print('  📺 B 站视频下载器')
+    print('  📺 B 站视频下载器  🅁 v2.2-cookie回执版 (09-24 21:12)')
     print('=' * 62)
     print(f'保存目录：{OUTPUT_DIR}')
     print()
