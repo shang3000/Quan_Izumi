@@ -198,8 +198,10 @@ def _stdin_pump(q):
     q.put(None)
 
 
-def ask(prompt, settle=0.45):
-    """读输入：吸收粘贴附带的多余行/空行，静默 settle 秒后返回"""
+def ask(prompt, settle=0.5):
+    """读输入：吸收粘贴附带的多余行/空行，静默 settle 秒后返回。
+    关键：若目前只收到空行，绝不立刻下结论——延长等待（2s）给晚到的粘贴留机会。
+    """
     print(prompt, end='', flush=True)
     if _PUMP['q'] is None:
         _PUMP['q'] = queue.Queue()
@@ -208,10 +210,18 @@ def ask(prompt, settle=0.45):
     while True:
         if _PUMP['eof'] and _PUMP['q'].empty():
             break
-        try:
-            item = _PUMP['q'].get() if not lines else _PUMP['q'].get(timeout=settle)
-        except queue.Empty:
-            break
+        if not lines:
+            item = _PUMP['q'].get()                     # 第一条：一直等到用户有动作
+        elif all(not ln.strip() for ln in lines):
+            try:
+                item = _PUMP['q'].get(timeout=2.0)      # 只有空行 → 多等 2s，防粘贴后到
+            except queue.Empty:
+                break
+        else:
+            try:
+                item = _PUMP['q'].get(timeout=settle)   # 已有内容 → 静默 settle 即收
+            except queue.Empty:
+                break
         if item is None:
             _PUMP['eof'] = True
             break
@@ -219,6 +229,34 @@ def ask(prompt, settle=0.45):
     if not lines:
         raise EOFError
     return '\n'.join(ln for ln in lines if ln.strip())
+
+
+def read_clipboard():
+    """读系统剪贴板（tkinter 优先，powershell 兜底），失败返回空串"""
+    try:
+        import tkinter
+        r = tkinter.Tk()
+        r.withdraw()
+        t = r.clipboard_get()
+        r.destroy()
+        return t
+    except Exception:
+        pass
+    try:
+        return subprocess.run(
+            ['powershell', '-NoProfile', '-Command', 'Get-Clipboard'],
+            capture_output=True, text=True, timeout=8).stdout
+    except Exception:
+        return ''
+
+
+def looks_like_cookie(text):
+    """剪贴板/输入内容是否像 B 站 Cookie"""
+    if not text:
+        return False
+    if re.search(r'(?i)(sessdata|bili_jct|buvid3|dedeuserid)', text):
+        return True
+    return len(re.findall(r'[A-Za-z_][\w.-]*=[^;\s]+', text)) >= 2
 
 
 # ============================================================
@@ -903,7 +941,18 @@ def ask_cookie(bili):
         print()
         return
     if not raw:
-        print('⏭  已跳过登录')
+        # 控制台没收到有效输入 → 尝试从剪贴板自动读取（用户刚复制过 Cookie 的场景）
+        cb = read_clipboard()
+        if looks_like_cookie(cb):
+            raw = cb.strip()
+            print('    · 控制台没收到输入，已自动从剪贴板读取 Cookie')
+        else:
+            print('⏭  已跳过登录')
+            return
+    # 输入的是链接而不是 Cookie → 不当 Cookie 用，直接按链接处理
+    if not looks_like_cookie(raw) and (parse_mid(raw) or extract_bvids(raw)):
+        print('  💡 这看起来是链接不是 Cookie——已跳过登录，直接处理这个链接')
+        handle_input(bili, raw.strip())
         return
     # 粘贴被拆成多行时自动拼合
     lines = [ln.strip() for ln in raw.split('\n') if ln.strip()]
@@ -1017,7 +1066,7 @@ def main():
             print('\n再见！')
             break
         text = text.replace('\n', ' ').strip()
-        if 'SESSDATA' in text:
+        if looks_like_cookie(text) and not parse_mid(text) and not extract_bvids(text):
             print('  💡 这看起来是 Cookie 不是链接——输入 c 重新设置 Cookie；请粘贴视频/空间链接')
             continue
         if not text:
